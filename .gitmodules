@@ -1,0 +1,15 @@
+[submodule "camera_service"]
+	path = camera_service
+	url = git@github.com:soyons/camera_service.git
+[submodule "robot_controller"]
+	path = robot_controller
+	url = git@github.com:soyons/robot_controller.git
+[submodule "ros_interface"]
+	path = ros_interface
+	url = git@github.com:soyons/ros_interface.git
+[submodule "teleop"]
+	path = teleop
+	url = git@github.com:soyons/teleop.git
+[submodule "vr_tracker_quest"]
+	path = vr_tracker_quest
+	url = git@github.com:soyons/vr_tracker_quest.git
