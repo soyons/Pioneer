@@ -1,0 +1,59 @@
+FROM ros:humble
+
+# 设置环境变量
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+
+# 检测架构并配置 apt 源
+RUN ARCH=$(dpkg --print-architecture) && \
+    UBUNTU_CODENAME=$(lsb_release -cs) && \
+    if [ "$ARCH" = "arm64" ]; then \
+        echo "Configuring official Ubuntu mirrors for ARM64" && \
+        echo "# Ubuntu 官方源 (ARM64)" > /etc/apt/sources.list && \
+        echo "deb http://ports.ubuntu.com/ubuntu-ports/ ${UBUNTU_CODENAME} main restricted universe multiverse" >> /etc/apt/sources.list && \
+        echo "deb http://ports.ubuntu.com/ubuntu-ports/ ${UBUNTU_CODENAME}-updates main restricted universe multiverse" >> /etc/apt/sources.list && \
+        echo "deb http://ports.ubuntu.com/ubuntu-ports/ ${UBUNTU_CODENAME}-backports main restricted universe multiverse" >> /etc/apt/sources.list && \
+        echo "deb http://ports.ubuntu.com/ubuntu-ports/ ${UBUNTU_CODENAME}-security main restricted universe multiverse" >> /etc/apt/sources.list; \
+    else \
+        echo "Configuring Tsinghua mirrors for ${ARCH}" && \
+        echo "# 清华大学开源软件镜像站" > /etc/apt/sources.list && \
+        echo "deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ ${UBUNTU_CODENAME} main restricted universe multiverse" >> /etc/apt/sources.list && \
+        echo "deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ ${UBUNTU_CODENAME}-updates main restricted universe multiverse" >> /etc/apt/sources.list && \
+        echo "deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ ${UBUNTU_CODENAME}-backports main restricted universe multiverse" >> /etc/apt/sources.list && \
+        echo "deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ ${UBUNTU_CODENAME}-security main restricted universe multiverse" >> /etc/apt/sources.list; \
+    fi && \
+    apt-get update && \
+    apt-get install -y \
+        python3-pip \
+        x11-apps \
+        libgl1-mesa-glx \
+        libglu1-mesa \
+        mesa-utils \
+        vim \
+        git \
+        wget \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# 配置 pip 清华源
+RUN mkdir -p /root/.pip && \
+    echo "[global]" > /root/.pip/pip.conf && \
+    echo "index-url = https://pypi.tuna.tsinghua.edu.cn/simple" >> /root/.pip/pip.conf && \
+    echo "[install]" >> /root/.pip/pip.conf && \
+    echo "trusted-host = pypi.tuna.tsinghua.edu.cn" >> /root/.pip/pip.conf
+
+# 安装 Python 依赖
+
+# 设置 OpenGL 软件渲染环境变量（用于 PyBullet GUI）
+ENV LIBGL_ALWAYS_SOFTWARE=1
+ENV MESA_GL_VERSION_OVERRIDE=3.3
+
+# 设置 DISPLAY 环境变量（默认值，可在运行时覆盖）
+ENV DISPLAY=:0
+
+# 设置工作目录
+WORKDIR /workspace
+
+# 默认命令
+CMD ["/bin/bash"]
