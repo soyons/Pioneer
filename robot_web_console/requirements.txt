@@ -1,0 +1,9 @@
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+httpx>=0.25.0  # 异步 HTTP 客户端,用于反向代理
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+python-multipart>=0.0.6
+pyyaml>=6.0
+psutil>=5.9.0  # 进程管理(开发模式)
+aiofiles>=23.0.0  # 异步文件操作

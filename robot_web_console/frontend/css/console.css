@@ -1,0 +1,252 @@
+/* Console 专用样式 - 三灯状态栏、分隔线、相机/遥操页面 */
+
+/* 导航栏分隔线 */
+.nav-divider {
+    width: 1px;
+    height: 24px;
+    background: var(--border-color);
+    margin: 0 4px;
+    align-self: center;
+    flex-shrink: 0;
+}
+
+/* 三灯服务状态栏 */
+.services-status {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.service-light {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 16px;
+    background: var(--bg-color);
+    cursor: help;
+    transition: background 0.2s;
+}
+
+.service-light:hover {
+    background: #e5e7eb;
+}
+
+.service-light .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-secondary);
+    animation: pulse 2s infinite;
+    flex-shrink: 0;
+}
+
+.service-light.online .status-dot {
+    background: var(--success-color);
+    animation: none;
+}
+
+.service-light.offline .status-dot {
+    background: var(--danger-color);
+    animation: none;
+}
+
+.service-light .service-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.service-light.online .service-label {
+    color: var(--text-primary);
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+    .services-status {
+        flex-wrap: wrap;
+        margin-left: 0;
+    }
+    .service-light .service-label {
+        display: none; /* 小屏只留灯 */
+    }
+}
+
+/* 相机页面 */
+.camera-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    gap: 16px;
+}
+
+.camera-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px;
+}
+
+.camera-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.camera-card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.camera-info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 16px;
+    font-size: 0.9rem;
+    margin-bottom: 12px;
+}
+
+.camera-info-label {
+    color: var(--text-secondary);
+}
+
+.camera-info-value {
+    color: var(--text-primary);
+    font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
+    font-size: 0.85rem;
+}
+
+.camera-controls {
+    border-top: 1px solid var(--border-color);
+    padding-top: 12px;
+    margin-top: 12px;
+}
+
+.control-row {
+    display: grid;
+    grid-template-columns: 130px 1fr 60px;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.control-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.control-slider {
+    width: 100%;
+}
+
+.control-value {
+    text-align: right;
+    font-family: monospace;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+}
+
+/* 流状态徽章 */
+.streaming-badge {
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.streaming-badge.live {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.streaming-badge.stale {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+/* 单行 Status 页面 */
+.status-oneline { font-size: 0.9rem; }
+.status-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    padding: 6px 0;
+}
+.status-row + .status-row { border-top: 1px dashed var(--border-color); }
+.status-meta { color: var(--text-secondary); font-size: 0.85rem; }
+.status-meta b { color: var(--text-primary); }
+.joint-chip, .ee-chip {
+    padding: 4px 10px;
+    background: var(--bg-color);
+    border-radius: 12px;
+    font-size: 0.82rem;
+    font-family: 'SF Mono', monospace;
+    color: var(--text-secondary);
+}
+.joint-chip b, .ee-chip b { color: var(--primary-color); font-weight: 600; }
+
+/* 相机预览模态 */
+.camera-preview {
+    margin-top: 12px;
+    border-top: 1px solid var(--border-color);
+    padding-top: 12px;
+    display: none;
+}
+.camera-preview.active { display: block; }
+.camera-preview img {
+    width: 100%;
+    border-radius: 6px;
+    background: #000;
+    display: block;
+}
+.btn-eye {
+    padding: 4px 10px;
+    border: 1px solid var(--border-color);
+    background: var(--card-bg);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+.btn-eye:hover { background: var(--bg-color); }
+.btn-eye.active { background: var(--primary-color); color: white; border-color: var(--primary-color); }
+
+.teleop-section {
+    margin-bottom: 24px;
+}
+
+.teleop-section h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--text-primary);
+}
+
+.teleop-config-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 12px;
+}
+
+.config-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.config-field label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.config-field input,
+.config-field select {
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 0.9rem;
+}

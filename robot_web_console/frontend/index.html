@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robot Web Console</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/console.css">
+</head>
+<body>
+    <div class="container">
+        <nav class="nav-tabs">
+            <div class="nav-tabs-left">
+                <!-- Robot 模块页面 -->
+                <button class="nav-tab active" data-page="status" data-module="robot">Status</button>
+                <button class="nav-tab" data-page="jog" data-module="robot">Jog Control</button>
+                <button class="nav-tab" data-page="presets" data-module="robot">Presets</button>
+                <button class="nav-tab" data-page="calibration" data-module="robot">Calibration</button>
+                <button class="nav-tab" data-page="diagnostics" data-module="robot">Diagnostics</button>
+                <button class="nav-tab" data-page="config" data-module="robot">Config</button>
+                <!-- 分隔线 -->
+                <div class="nav-divider"></div>
+                <!-- Camera/Teleop 模块页面 -->
+                <button class="nav-tab" data-page="cameras" data-module="camera">📷 Cameras</button>
+                <button class="nav-tab" data-page="teleop" data-module="teleop">🥽 Teleop</button>
+            </div>
+
+            <!-- 三灯状态栏 -->
+            <div class="services-status" id="servicesStatus">
+                <div class="service-light" data-service="camera" title="Camera Service">
+                    <span class="status-dot"></span>
+                    <span class="service-label">Camera</span>
+                </div>
+                <div class="service-light" data-service="teleop" title="Teleop Service">
+                    <span class="status-dot"></span>
+                    <span class="service-label">Teleop</span>
+                </div>
+                <div class="service-light" data-service="robot" title="Robot Controller">
+                    <span class="status-dot"></span>
+                    <span class="service-label">Robot</span>
+                </div>
+            </div>
+        </nav>
+
+        <main id="mainContent">
+            <!-- Content loaded dynamically -->
+        </main>
+
+        <footer>
+            <p>Robot Web Console v1.0 |
+               <a href="/docs" target="_blank">API Docs</a> |
+               <a href="/api/services/status" target="_blank">Service Status</a>
+            </p>
+        </footer>
+    </div>
+
+    <!-- Emergency Stop Button (Always Visible) -->
+    <button class="emergency-stop" id="emergencyStop" title="Emergency Stop (Ctrl+E)">
+        ⚠️ STOP
+    </button>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/config.js"></script>
+    <script src="/js/diagnostics.js"></script>
+    <script src="/js/calibration.js"></script>
+    <script src="/js/cameras.js"></script>
+    <script src="/js/teleop.js"></script>
+    <script src="/js/services_monitor.js"></script>
+    <script src="/js/main.js"></script>
+</body>
+</html>
