@@ -7,9 +7,9 @@
 [submodule "ros_interface"]
 	path = ros_interface
 	url = git@github.com:soyons/ros_interface.git
-[submodule "teleop"]
-	path = teleop
-	url = git@github.com:soyons/teleop.git
 [submodule "vr_tracker_quest"]
 	path = vr_tracker_quest
 	url = git@github.com:soyons/vr_tracker_quest.git
+[submodule "autopilot"]
+	path = autopilot
+	url = git@github.com:soyons/autopilot.git
