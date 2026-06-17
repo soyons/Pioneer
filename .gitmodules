@@ -10,6 +10,6 @@
 [submodule "vr_tracker_quest"]
 	path = vr_tracker_quest
 	url = git@github.com:soyons/vr_tracker_quest.git
-[submodule "autopilot"]
-	path = autopilot
-	url = git@github.com:soyons/autopilot.git
+[submodule "coach"]
+	path = coach
+	url = git@github.com:soyons/coach.git
