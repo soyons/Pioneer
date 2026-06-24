@@ -1,15 +1,16 @@
-"""配置管理 - Pydantic v1 兼容版本"""
+"""配置管理 - 使用 Pydantic Settings"""
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Literal, Optional
 
 import yaml
 from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings
 
 
 class DevConfig(BaseModel):
     """开发模式服务启动配置"""
     enabled: bool = True
-    command: list
+    command: list[str]
     cwd: str
     env: Dict[str, str] = Field(default_factory=dict)
 
@@ -35,15 +36,15 @@ class LoggingConfig(BaseModel):
     format: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 
-class Settings(BaseModel):
+class Settings(BaseSettings):
     """全局配置"""
-    mode: str = "production"  # Literal 在 Python 3.6 需要 typing_extensions
+    mode: Literal["production", "development"] = "production"
     console: ConsoleConfig = Field(default_factory=ConsoleConfig)
     services: Dict[str, ServiceConfig]
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
 
     @classmethod
-    def from_yaml(cls, config_path: Path):
+    def from_yaml(cls, config_path: Path) -> "Settings":
         """从 YAML 文件加载配置"""
         with open(config_path, "r") as f:
             data = yaml.safe_load(f)
@@ -51,10 +52,10 @@ class Settings(BaseModel):
 
 
 # 全局配置实例
-_settings = None
+_settings: Optional[Settings] = None
 
 
-def load_settings(config_path=None):
+def load_settings(config_path: Optional[Path] = None) -> Settings:
     """加载配置(单例)"""
     global _settings
     if _settings is None:
@@ -64,7 +65,7 @@ def load_settings(config_path=None):
     return _settings
 
 
-def get_settings():
+def get_settings() -> Settings:
     """获取配置实例"""
     if _settings is None:
         return load_settings()

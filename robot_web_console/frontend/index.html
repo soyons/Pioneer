@@ -20,22 +20,21 @@
                 <button class="nav-tab" data-page="config" data-module="robot">Config</button>
                 <!-- 分隔线 -->
                 <div class="nav-divider"></div>
-                <!-- Camera/Teleop 模块页面 -->
-                <button class="nav-tab" data-page="cameras" data-module="camera">📷 Cameras</button>
-                <button class="nav-tab" data-page="teleop" data-module="teleop">🥽 Teleop</button>
+                <!-- 遥操采集页面（后续功能占位） -->
+                <button class="nav-tab" data-page="teleopdata" data-module="teleop" disabled style="opacity:0.5;">🎮 Coach Data</button>
             </div>
 
             <!-- 三灯状态栏 -->
             <div class="services-status" id="servicesStatus">
-                <div class="service-light" data-service="camera" title="Camera Service">
+                <div class="service-light" data-service="camera" title="Camera Service - 点击查看详情">
                     <span class="status-dot"></span>
                     <span class="service-label">Camera</span>
                 </div>
-                <div class="service-light" data-service="teleop" title="Teleop Service">
+                <div class="service-light" data-service="teleop" title="Coach Service - 点击查看详情">
                     <span class="status-dot"></span>
-                    <span class="service-label">Teleop</span>
+                    <span class="service-label">Coach</span>
                 </div>
-                <div class="service-light" data-service="robot" title="Robot Controller">
+                <div class="service-light" data-service="robot" title="Robot Controller - 点击查看详情">
                     <span class="status-dot"></span>
                     <span class="service-label">Robot</span>
                 </div>

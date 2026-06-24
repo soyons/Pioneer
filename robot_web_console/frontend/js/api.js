@@ -310,6 +310,10 @@ class RobotAPI {
         return this.request('/teleop/reset_reference', { method: 'POST', _prefix: this.teleopPrefix });
     }
 
+    async getTeleopVRData() {
+        return this.request('/vr_data', { method: 'GET', _prefix: this.teleopPrefix });
+    }
+
     // ============================================================
     // Console / Service Monitor API (前缀 /api/services/*)
     // ============================================================
@@ -319,6 +323,26 @@ class RobotAPI {
 
     async triggerHealthCheck() {
         return this.request('/check', { method: 'POST', _prefix: this.consolePrefix });
+    }
+
+    // ============================================================
+    // System Resources API (前缀 /api/system/*)
+    // ============================================================
+    async getSystemInfo(topN = 5) {
+        return this.request(`/info?top_n=${topN}`, { method: 'GET', _prefix: '/api/system' });
+    }
+
+    // === VR Connection ===
+    async getVRStatus() {
+        return this.request('/vr/status', { method: 'GET', _prefix: '/api/system' });
+    }
+
+    async connectVR() {
+        return this.request('/vr/connect', { method: 'POST', _prefix: '/api/system' });
+    }
+
+    async disconnectVR() {
+        return this.request('/vr/disconnect', { method: 'POST', _prefix: '/api/system' });
     }
 }
 

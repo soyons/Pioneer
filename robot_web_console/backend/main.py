@@ -1,6 +1,5 @@
 """robot_web_console 主入口 - FastAPI 应用"""
 import logging
-from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -8,43 +7,46 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings, load_settings
-from .routes import proxy, services
+from .routes import proxy, services, system
 from .services.monitor import ServiceMonitor
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """应用生命周期管理"""
-    # 启动时
+# 创建 FastAPI 应用（Python 3.6兼容：使用 on_event 而非 lifespan）
+app = FastAPI(
+    title="Robot Web Console",
+    description="统一 Web 控制台 - 管理 camera/teleop/robot 服务",
+    version="1.0.0",
+)
+
+
+@app.on_event("startup")
+async def startup_event():
+    """应用启动事件"""
     settings = get_settings()
     logging.basicConfig(
         level=getattr(logging, settings.logging.level),
         format=settings.logging.format
     )
     logger = logging.getLogger(__name__)
-    logger.info(f"Starting robot_web_console in {settings.mode} mode")
+    logger.info("Starting robot_web_console in {} mode".format(settings.mode))
 
     # 初始化服务监控
     monitor = ServiceMonitor(settings.services, check_interval=2.0)
     await monitor.start()
     app.state.monitor = monitor
 
-    logger.info(f"Web console ready on http://{settings.console.host}:{settings.console.port}")
+    logger.info("Web console ready on http://{}:{}".format(
+        settings.console.host, settings.console.port))
 
-    yield
 
-    # 关闭时
+@app.on_event("shutdown")
+async def shutdown_event():
+    """应用关闭事件"""
+    logger = logging.getLogger(__name__)
     logger.info("Shutting down robot_web_console")
-    await monitor.stop()
+    if hasattr(app.state, 'monitor'):
+        await app.state.monitor.stop()
 
-
-# 创建 FastAPI 应用
-app = FastAPI(
-    title="Robot Web Console",
-    description="统一 Web 控制台 - 管理 camera/teleop/robot 服务",
-    version="1.0.0",
-    lifespan=lifespan
-)
 
 # CORS 中间件
 app.add_middleware(
@@ -57,6 +59,7 @@ app.add_middleware(
 
 # 注册路由
 app.include_router(services.router)
+app.include_router(system.router)
 app.include_router(proxy.camera_router)
 app.include_router(proxy.teleop_router)
 app.include_router(proxy.robot_router)
@@ -91,7 +94,7 @@ static_dir = project_root / settings.console.static_dir
 if static_dir.exists():
     app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
 else:
-    logging.warning(f"Static directory not found: {static_dir}")
+    logging.warning("Static directory not found: {}".format(static_dir))
 
 
 if __name__ == "__main__":

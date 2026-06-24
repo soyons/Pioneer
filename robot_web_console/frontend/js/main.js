@@ -4,6 +4,7 @@ class RobotApp {
         this.currentPage = 'status';
         this.isConnected = false;
         this.stateUpdateInterval = null;
+        this.systemUpdateInterval = null;
 
         this.init();
     }
@@ -29,12 +30,16 @@ class RobotApp {
         const tabs = document.querySelectorAll('.nav-tab');
         tabs.forEach(tab => {
             tab.addEventListener('click', () => {
+                if (tab.disabled) return;
                 const page = tab.dataset.page;
                 this.loadPage(page);
 
                 // Update active state
                 tabs.forEach(t => t.classList.remove('active'));
                 tab.classList.add('active');
+
+                // 清除三灯的 selected 状态(因为切到了导航栏页面)
+                document.querySelectorAll('.service-light').forEach(l => l.classList.remove('selected'));
             });
         });
     }
@@ -90,6 +95,12 @@ class RobotApp {
         if (this.currentPage === 'cameras' && typeof CamerasPage !== 'undefined') CamerasPage.onLeave?.();
         if (this.currentPage === 'teleop' && typeof TeleopPage !== 'undefined') TeleopPage.onLeave?.();
 
+        // 离开 Status 页时清掉刷新定时器,避免后台空跑
+        if (this.currentPage === 'status' && pageName !== 'status') {
+            if (this.stateUpdateInterval) { clearInterval(this.stateUpdateInterval); this.stateUpdateInterval = null; }
+            if (this.systemUpdateInterval) { clearInterval(this.systemUpdateInterval); this.systemUpdateInterval = null; }
+        }
+
         this.currentPage = pageName;
         const content = document.getElementById('mainContent');
 
@@ -138,8 +149,124 @@ class RobotApp {
                 <div class="card-title">📊 Robot Status</div>
                 <div id="statusOneLine" class="status-oneline">Loading...</div>
             </div>
+            <div class="card mt-4">
+                <div class="card-title">
+                    💻 System Resources
+                    <span id="systemUpdatedAt" class="status-meta" style="float:right;font-weight:normal;">-</span>
+                </div>
+                <div id="systemInfo" class="system-info">Loading...</div>
+            </div>
         `;
         this.startStatusUpdates();
+        this.startSystemUpdates();
+    }
+
+    async startSystemUpdates() {
+        if (this.systemUpdateInterval) clearInterval(this.systemUpdateInterval);
+        const update = async () => {
+            try {
+                const info = await api.getSystemInfo(5);
+                this.updateSystemDisplay(info);
+            } catch (error) {
+                console.error('Failed to update system info:', error);
+                const el = document.getElementById('systemInfo');
+                if (el) el.innerHTML = `<p class="text-danger">系统信息获取失败: ${error.message}</p>`;
+            }
+        };
+        await update();
+        // 系统资源 2 秒刷新一次,与机器人状态(1Hz)解耦
+        this.systemUpdateInterval = setInterval(update, 2000);
+    }
+
+    updateSystemDisplay(info) {
+        const el = document.getElementById('systemInfo');
+        if (!el || !info || info.error) {
+            if (el && info?.error) el.innerHTML = `<p class="text-danger">${info.error}</p>`;
+            return;
+        }
+
+        const cpu = info.cpu || {};
+        const mem = info.memory || {};
+        const disk = info.disk || {};
+        const top = info.top_processes || [];
+
+        const fmtUptime = (s) => {
+            const d = Math.floor(s / 86400);
+            const h = Math.floor((s % 86400) / 3600);
+            const m = Math.floor((s % 3600) / 60);
+            return d > 0 ? `${d}d ${h}h ${m}m` : `${h}h ${m}m`;
+        };
+
+        const barColor = (pct) => pct >= 85 ? 'danger' : (pct >= 70 ? 'warning' : 'success');
+        const bar = (pct) => `
+            <div class="resource-bar">
+                <div class="resource-bar-fill ${barColor(pct)}" style="width:${Math.min(100, pct)}%"></div>
+            </div>
+        `;
+
+        const load = cpu.load_avg || [0, 0, 0];
+        const perCore = (cpu.per_core || []).map((p, i) =>
+            `<span class="core-chip" title="Core ${i}"><b>C${i}</b> ${p.toFixed(0)}%</span>`
+        ).join('');
+
+        const procRows = top.map(p => `
+            <tr>
+                <td class="mono">${p.pid}</td>
+                <td class="mono" style="max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.name}</td>
+                <td class="mono num">${p.cpu_percent.toFixed(1)}%</td>
+                <td class="mono num">${p.memory_percent.toFixed(1)}%</td>
+            </tr>
+        `).join('');
+
+        el.innerHTML = `
+            <div class="resource-grid">
+                <div class="resource-item">
+                    <div class="resource-label">
+                        <span>CPU <small>(${cpu.cores} cores)</small></span>
+                        <span><b>${cpu.percent.toFixed(1)}%</b></span>
+                    </div>
+                    ${bar(cpu.percent)}
+                    <div class="resource-meta">
+                        Load: <b>${load[0].toFixed(2)}</b> / ${load[1].toFixed(2)} / ${load[2].toFixed(2)}
+                    </div>
+                    <div class="core-chips">${perCore}</div>
+                </div>
+
+                <div class="resource-item">
+                    <div class="resource-label">
+                        <span>Memory</span>
+                        <span><b>${mem.used_gib} / ${mem.total_gib} GiB</b> (${mem.percent}%)</span>
+                    </div>
+                    ${bar(mem.percent)}
+                    <div class="resource-meta">
+                        Available: <b>${mem.available_gib} GiB</b>
+                        ${mem.swap_total_gib > 0 ? `· Swap: ${mem.swap_used_gib} / ${mem.swap_total_gib} GiB (${mem.swap_percent}%)` : ''}
+                    </div>
+                </div>
+
+                <div class="resource-item">
+                    <div class="resource-label">
+                        <span>Disk (/)</span>
+                        <span><b>${disk.used_gib} / ${disk.total_gib} GiB</b> (${disk.percent}%)</span>
+                    </div>
+                    ${bar(disk.percent)}
+                    <div class="resource-meta">Free: <b>${disk.free_gib} GiB</b> · Uptime: ${fmtUptime(info.uptime_seconds)}</div>
+                </div>
+            </div>
+
+            <div class="top-processes">
+                <div class="resource-meta" style="margin-bottom:4px;"><b>Top processes (by CPU)</b></div>
+                <table class="proc-table">
+                    <thead>
+                        <tr><th>PID</th><th>Command</th><th class="num">CPU</th><th class="num">Mem</th></tr>
+                    </thead>
+                    <tbody>${procRows || '<tr><td colspan="4">-</td></tr>'}</tbody>
+                </table>
+            </div>
+        `;
+
+        const tsEl = document.getElementById('systemUpdatedAt');
+        if (tsEl) tsEl.textContent = 'Updated: ' + new Date(info.timestamp * 1000).toLocaleTimeString();
     }
 
     async startStatusUpdates() {

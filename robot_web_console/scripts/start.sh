@@ -4,12 +4,13 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_ROOT"
 
 # 检查依赖
 if ! python3 -c "import fastapi, uvicorn" 2>/dev/null; then
     echo "Installing dependencies..."
-    pip install -r requirements.txt
+    pip3 install -r requirements.txt
 fi
 
 # 读取配置里的 host/port/mode
@@ -25,5 +26,5 @@ if [ "$MODE" = "development" ]; then
     RELOAD_FLAG="--reload"
 fi
 
-# 用 uvicorn 直接启动(比 python3 -m backend.main 更稳定)
-exec uvicorn backend.main:app --host "$HOST" --port "$PORT" $RELOAD_FLAG
+# 用 python3 -m 方式启动 uvicorn（更兼容）
+exec python3 -m uvicorn backend.main:app --host "$HOST" --port "$PORT" $RELOAD_FLAG

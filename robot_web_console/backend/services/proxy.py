@@ -8,6 +8,11 @@ from fastapi.responses import JSONResponse, StreamingResponse
 logger = logging.getLogger(__name__)
 
 
+def _is_status_endpoint(path: str) -> bool:
+    """判断是否为状态/健康检查端点"""
+    return path.endswith("/status") or path.endswith("/health")
+
+
 async def proxy_request(
     request: Request,
     target_url: str,
@@ -75,14 +80,34 @@ async def proxy_request(
             )
 
     except httpx.TimeoutException:
-        logger.error(f"Proxy timeout: {request.method} {target_full_url}")
+        logger.warning(f"Proxy timeout: {request.method} {target_full_url}")
+        # 状态/健康检查端点在超时时返回 200 + connected=false
+        if _is_status_endpoint(target_path):
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "connected": False,
+                    "error": "Request timeout",
+                    "status": "timeout"
+                }
+            )
         return JSONResponse(
             status_code=504,
             content={"error": "Gateway timeout", "target": target_url}
         )
 
     except httpx.ConnectError:
-        logger.error(f"Proxy connection failed: {target_full_url}")
+        logger.warning(f"Proxy connection failed: {target_full_url}")
+        # 状态/健康检查端点在服务不可达时返回 200 + connected=false，而不是 502
+        if _is_status_endpoint(target_path):
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "connected": False,
+                    "error": "Service unavailable",
+                    "status": "offline"
+                }
+            )
         return JSONResponse(
             status_code=502,
             content={"error": "Bad gateway - service unavailable", "target": target_url}

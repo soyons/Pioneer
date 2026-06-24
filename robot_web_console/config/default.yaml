@@ -24,7 +24,7 @@ services:
         PYTHONPATH: "/workspace/camera_service/src"
 
   teleop:
-    name: "Teleop Service"
+    name: "Coach"
     api_url: "http://localhost:8080"
     health_endpoint: "/api/health"
     dev:

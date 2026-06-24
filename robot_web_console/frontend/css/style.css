@@ -396,3 +396,203 @@ footer a:hover {
 .gap-2 { gap: 8px; }
 .gap-4 { gap: 16px; }
 .hidden { display: none !important; }
+
+/* Process Table */
+.proc-table tr:last-child td { border-bottom: none; }
+
+.text-danger { color: var(--danger-color); }
+
+/* VR Data Display Cards */
+.vr-tracker-card {
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.vr-data-block {
+    min-height: 100px;
+}
+
+/* VR Connection Button */
+.vr-connect-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 8px;
+    background: var(--card-bg);
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    border: 2px solid var(--border-color);
+    margin-right: 12px;
+}
+
+.vr-connect-btn:hover {
+    background: var(--bg-color);
+    border-color: var(--primary-color);
+}
+
+.vr-connect-btn.connected {
+    background: #10b98120;
+    border-color: var(--success-color);
+    color: var(--success-color);
+}
+
+.vr-connect-btn.warning {
+    background: #f59e0b20;
+    border-color: var(--warning-color);
+    color: var(--warning-color);
+}
+
+.vr-connect-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.vr-icon {
+    font-size: 1.1rem;
+}
+
+.vr-label {
+    font-weight: 600;
+}
+
+.vr-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-secondary);
+}
+
+.vr-status-dot.connected {
+    background: var(--success-color);
+    animation: pulse 2s infinite;
+}
+
+.vr-status-dot.disconnected {
+    background: var(--danger-color);
+}
+
+.vr-status-dot.warning {
+    background: var(--warning-color);
+    animation: pulse 2s infinite;
+}
+
+/* Modal Dialog for VR Manual Command */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.modal-dialog {
+    background: var(--card-bg);
+    border-radius: 12px;
+    box-shadow: var(--shadow-lg);
+    max-width: 600px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 1.3rem;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: var(--text-secondary);
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+}
+
+.modal-close:hover {
+    background: var(--bg-color);
+    color: var(--text-primary);
+}
+
+.modal-body {
+    padding: 20px;
+}
+
+.modal-footer {
+    padding: 20px;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+.command-box {
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px;
+    margin: 16px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.command-box code {
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.95rem;
+    color: var(--primary-color);
+    flex: 1;
+}
+
+.text-warning {
+    color: var(--warning-color);
+    font-size: 0.9rem;
+    margin-top: 12px;
+}
+
+.text-muted {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-top: 12px;
+}
+
+.btn-sm {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+}
+
+.btn-secondary {
+    background: var(--text-secondary);
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: var(--text-primary);
+}

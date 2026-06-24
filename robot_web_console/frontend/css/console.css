@@ -250,3 +250,28 @@
     border-radius: 6px;
     font-size: 0.9rem;
 }
+
+/* 三灯选中状态(被点击后在主内容区加载对应页面时高亮) */
+.service-light.selected {
+    background: var(--primary-color);
+}
+
+.service-light.selected .service-label {
+    color: white;
+}
+
+.service-light.selected.online .status-dot {
+    background: white;
+}
+
+.service-light.selected.offline .status-dot {
+    background: #fecaca;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+    .service-detail-panel {
+        width: 100%;
+        right: -100%;
+    }
+}

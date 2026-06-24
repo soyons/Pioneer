@@ -41,7 +41,7 @@ class ServiceMonitor:
     async def check_service(self, key: str, config: ServiceConfig) -> None:
         """检查单个服务健康状态"""
         status = self.status[key]
-        url = f"{config.api_url.rstrip('/')}{config.health_endpoint}"
+        url = "{}/{}".format(config.api_url.rstrip('/'), config.health_endpoint.lstrip('/'))
 
         start = asyncio.get_event_loop().time()
         try:
@@ -51,7 +51,7 @@ class ServiceMonitor:
 
                 status.online = response.status_code == 200
                 status.response_time_ms = elapsed_ms
-                status.error = None if status.online else f"HTTP {response.status_code}"
+                status.error = None if status.online else "HTTP {}".format(response.status_code)
                 status.last_check = datetime.now()
 
         except httpx.TimeoutException:
@@ -71,7 +71,7 @@ class ServiceMonitor:
             status.response_time_ms = None
             status.error = str(e)
             status.last_check = datetime.now()
-            logger.error(f"Health check failed for {config.name}: {e}")
+            logger.error("Health check failed for {}: {}".format(config.name, e))
 
     async def check_all(self) -> None:
         """并发检查所有服务"""
@@ -94,7 +94,8 @@ class ServiceMonitor:
         if self._running:
             return
         self._running = True
-        self._task = asyncio.create_task(self._monitor_loop())
+        # Python 3.6 兼容：使用 ensure_future 而非 create_task
+        self._task = asyncio.ensure_future(self._monitor_loop())
 
     async def stop(self) -> None:
         """停止监控"""
