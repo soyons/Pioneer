@@ -21,10 +21,10 @@ const TeleopPage = {
                 </div>
             </div>
 
-            <div class="card">
+            <div class="card" style="display: none;">
                 <div class="card-title">🥽 VR 连接管理</div>
 
-                <!-- VR 连接状态显示 -->
+                <!-- VR 连接状态显示 - 临时禁用（容器内无法使用 adb） -->
                 <div id="vrConnectionStatus" style="margin-bottom: 16px; padding: 12px; border-radius: 6px; background: var(--bg-color);">
                     <div style="display: flex; align-items: center; gap: 12px;">
                         <div id="vrStatusIndicator" style="width: 12px; height: 12px; border-radius: 50%; background: var(--text-secondary);"></div>
@@ -91,9 +91,10 @@ const TeleopPage = {
         document.getElementById('btnReloadConfig').addEventListener('click', () => this.loadConfig());
         document.getElementById('btnVRToggle').addEventListener('click', () => this.handleVRToggle());
 
-        await Promise.all([this.refreshStatus(), this.loadConfig(), this.updateVRStatus()]);
+        await Promise.all([this.refreshStatus(), this.loadConfig()]);
         this.refreshTimer = setInterval(() => this.refreshStatus(true), this.refreshIntervalMs);
-        this.vrStatusTimer = setInterval(() => this.updateVRStatus(), 3000);
+        // VR 状态轮询已临时禁用（容器内无 adb 访问）
+        // this.vrStatusTimer = setInterval(() => this.updateVRStatus(), 3000);
     },
 
     onLeave() {
