@@ -168,6 +168,35 @@
     color: #991b1b;
 }
 
+/* Coach Data 录制状态横幅 */
+.rec-banner {
+    padding: 12px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-color);
+    transition: background 0.2s, border-color 0.2s;
+}
+.rec-banner.recording {
+    background: #fef2f2;
+    border-color: var(--danger-color);
+}
+.rec-dot {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--text-secondary);
+}
+.rec-banner.recording .rec-dot {
+    background: var(--danger-color);
+    animation: rec-pulse 1.2s infinite;
+}
+@keyframes rec-pulse {
+    0%   { opacity: 1; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+    70%  { opacity: 0.7; box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+    100% { opacity: 1; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
 /* 单行 Status 页面 */
 .status-oneline { font-size: 0.9rem; }
 .status-row {

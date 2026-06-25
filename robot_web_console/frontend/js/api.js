@@ -315,6 +315,65 @@ class RobotAPI {
     }
 
     // ============================================================
+    // Coach Data Recording API (前缀 /api/teleop/* -> coach)
+    // ============================================================
+    async getRecordingStatus() {
+        return this.request('/recording/status', { method: 'GET', _prefix: this.teleopPrefix });
+    }
+
+    async startRecording(payload = {}) {
+        return this.request('/recording/start', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+            _prefix: this.teleopPrefix,
+        });
+    }
+
+    async stopRecording(result = 'success', notes = '') {
+        return this.request('/recording/stop', {
+            method: 'POST',
+            body: JSON.stringify({ result, notes }),
+            _prefix: this.teleopPrefix,
+        });
+    }
+
+    async setRecordingContext(payload = {}) {
+        return this.request('/recording/context', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+            _prefix: this.teleopPrefix,
+        });
+    }
+
+    async listEpisodes(limit = 50) {
+        return this.request(`/recording/episodes?limit=${limit}`, { method: 'GET', _prefix: this.teleopPrefix });
+    }
+
+    async listCollectors() {
+        return this.request('/collectors', { method: 'GET', _prefix: this.teleopPrefix });
+    }
+
+    async addCollector(name, fields = {}) {
+        return this.request('/collectors', {
+            method: 'POST',
+            body: JSON.stringify({ name, ...fields }),
+            _prefix: this.teleopPrefix,
+        });
+    }
+
+    async listTasks() {
+        return this.request('/tasks', { method: 'GET', _prefix: this.teleopPrefix });
+    }
+
+    async addTask(name, fields = {}) {
+        return this.request('/tasks', {
+            method: 'POST',
+            body: JSON.stringify({ name, ...fields }),
+            _prefix: this.teleopPrefix,
+        });
+    }
+
+    // ============================================================
     // Console / Service Monitor API (前缀 /api/services/*)
     // ============================================================
     async getServicesStatus() {
