@@ -95,6 +95,7 @@ class RobotApp {
         if (this.currentPage === 'cameras' && typeof CamerasPage !== 'undefined') CamerasPage.onLeave?.();
         if (this.currentPage === 'teleop' && typeof TeleopPage !== 'undefined') TeleopPage.onLeave?.();
         if (this.currentPage === 'coachdata' && typeof CoachDataPage !== 'undefined') CoachDataPage.onLeave?.();
+        if (this.currentPage === 'depot' && typeof DepotPage !== 'undefined') DepotPage.onLeave?.();
 
         // 离开 Status 页时清掉刷新定时器,避免后台空跑
         if (this.currentPage === 'status' && pageName !== 'status') {
@@ -137,6 +138,9 @@ class RobotApp {
                     break;
                 case 'coachdata':
                     await CoachDataPage.render(content);
+                    break;
+                case 'depot':
+                    await DepotPage.render(content);
                     break;
                 default:
                     content.innerHTML = '<p>Page not found</p>';

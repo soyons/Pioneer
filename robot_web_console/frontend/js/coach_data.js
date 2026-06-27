@@ -11,7 +11,7 @@ const CoachDataPage = {
         container.innerHTML = `
             <div class="card">
                 <div class="card-title">
-                    <span>🎬 数据采集</span>
+                    <span>🎬 Field</span>
                     <button class="btn btn-secondary btn-sm" id="btnCoachRefresh">刷新</button>
                 </div>
                 <div class="coach-context" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
@@ -50,7 +50,7 @@ const CoachDataPage = {
                     <button class="btn btn-danger" id="btnStopFailure" disabled>✗ 失败结束</button>
                 </div>
                 <p style="color:var(--text-secondary); font-size:0.85rem; margin-top:8px;">
-                    VR 控制：左手 Y 键开始 · 右手 A 键成功结束 · 左手 X 键失败结束。Web 按钮与 VR 等价。
+                    VR 控制：左手 Y 键开始 · 右手 A 键成功结束 · 右手 B 键失败结束。Web 按钮与 VR 等价。
                 </p>
             </div>
 
@@ -81,9 +81,18 @@ const CoachDataPage = {
     },
 
     onLeave() {
-        if (this.statusTimer) { clearInterval(this.statusTimer); this.statusTimer = null; }
-        // 停掉所有相机流
-        document.querySelectorAll('#coachCameras img[data-camera]').forEach(img => { img.src = ''; });
+        if (this.statusTimer) {
+            clearInterval(this.statusTimer);
+            this.statusTimer = null;
+        }
+        // 停掉所有相机流，释放带宽
+        const previews = document.querySelectorAll('#coachCameras .camera-preview.active');
+        previews.forEach(preview => {
+            const camName = preview.dataset.camera;
+            if (camName) {
+                this.setPreview(camName, false);
+            }
+        });
     },
 
     async refreshAll() {
@@ -164,39 +173,71 @@ const CoachDataPage = {
                 return;
             }
             // 集合一致则不重建（避免中断正在播放的流）
-            const existing = content.querySelectorAll('.camera-preview');
+            const existing = content.querySelectorAll('.camera-card');
             const sameSet = existing.length === this.cameras.length &&
-                this.cameras.every((c, i) => existing[i].dataset.camera === c.name);
-            if (sameSet) return;
+                this.cameras.every((c, i) => existing[i]?.dataset.camera === c.name);
+            if (sameSet) {
+                return;
+            }
+
+            // 记住哪些预览是活跃的
+            const wasActive = new Set(
+                Array.from(content.querySelectorAll('.camera-preview.active'))
+                    .map(p => p.dataset.camera)
+            );
+
             content.innerHTML = this.cameras.map(c => `
                 <div class="camera-card" data-camera="${c.name}">
                     <div class="camera-card-header">
                         <div class="camera-card-title">${c.name}</div>
                         <span class="streaming-badge ${c.streaming ? 'live' : 'stale'}">${c.streaming ? 'LIVE' : 'STALE'}</span>
                     </div>
-                    <div class="camera-preview" id="coach-preview-${c.name}" data-camera="${c.name}">
+                    <div class="camera-preview" id="preview-${c.name}" data-camera="${c.name}">
                         <img alt="${c.name}" data-camera="${c.name}">
                     </div>
                 </div>
             `).join('');
+
+            // 恢复之前活跃的预览
+            this.cameras.forEach(c => {
+                if (wasActive.has(c.name)) {
+                    this.setPreview(c.name, true);
+                }
+            });
         } catch (e) {
+            console.error('[Coach] loadCameras failed:', e);
             content.innerHTML = `<p style="color:var(--danger-color)">相机加载失败: ${e.message}</p>`;
+        }
+    },
+
+    setPreview(camName, on) {
+        const preview = document.getElementById(`preview-${camName}`);
+        if (!preview) return;
+        const img = preview.querySelector('img');
+        if (on) {
+            preview.classList.add('active');
+            // 加 t 参数防止浏览器缓存,首次开启时才设
+            if (!img.src || !img.src.includes('/stream')) {
+                img.src = `/api/camera/cameras/${encodeURIComponent(camName)}/stream?t=${Date.now()}`;
+            }
+        } else {
+            preview.classList.remove('active');
+            img.src = '';  // 主动断开,避免后端流持续占用
         }
     },
 
     toggleCameras() {
         const btn = document.getElementById('btnToggleCams');
-        const imgs = document.querySelectorAll('#coachCameras img[data-camera]');
-        const anyOn = Array.from(imgs).some(img => img.src && img.src.includes('/stream'));
-        imgs.forEach(img => {
-            const name = img.dataset.camera;
-            if (anyOn) {
-                img.src = '';
-            } else {
-                img.src = `/api/camera/cameras/${encodeURIComponent(name)}/stream?t=${Date.now()}`;
+        const previews = document.querySelectorAll('#coachCameras .camera-preview');
+        const allActive = Array.from(previews).every(p => p.classList.contains('active'));
+
+        previews.forEach(preview => {
+            const camName = preview.dataset.camera;
+            if (camName) {
+                this.setPreview(camName, !allActive);
             }
         });
-        btn.textContent = anyOn ? '▶ 开启画面' : '⏸ 关闭画面';
+        btn.textContent = allActive ? '▶ 开启画面' : '⏸ 关闭画面';
     },
 
     async loadEpisodes() {

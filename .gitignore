@@ -17,3 +17,6 @@ build/
 log/
 logs/
 *.log
+
+# 转化后数据集 / 合成验证数据(体积大,不入库)
+piper_dataset/data/

@@ -35,12 +35,22 @@ class LoggingConfig(BaseModel):
     format: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 
+class DatasetsConfig(BaseModel):
+    """转化后数据集(piper_dataset / LeRobot 格式)的查看根目录。
+
+    Depot 页面只读浏览此目录下的数据集。每个子目录若含 meta/info.json
+    即视为一个数据集。
+    """
+    root: str = "/workspace/piper_dataset/data"
+
+
 class Settings(BaseModel):
     """全局配置"""
     mode: str = "production"  # Literal 在 Python 3.6 需要 typing_extensions
     console: ConsoleConfig = Field(default_factory=ConsoleConfig)
     services: Dict[str, ServiceConfig]
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    datasets: DatasetsConfig = Field(default_factory=DatasetsConfig)
 
     @classmethod
     def from_yaml(cls, config_path: Path):

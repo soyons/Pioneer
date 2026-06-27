@@ -229,9 +229,11 @@
 .camera-preview.active { display: block; }
 .camera-preview img {
     width: 100%;
+    min-height: 240px;
     border-radius: 6px;
     background: #000;
     display: block;
+    object-fit: contain;
 }
 .btn-eye {
     padding: 4px 10px;
@@ -303,4 +305,261 @@
         width: 100%;
         right: -100%;
     }
+}
+
+/* ===== Depot 数据查看页 ===== */
+.depot-meta code {
+    background: var(--bg-color);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+}
+.depot-channels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+/* 机械单元竖排(并排布局左列) */
+.depot-channels-col {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    margin-bottom: 0;
+    gap: 5px;
+}
+/* 数据卡片: 左侧单元选择, 右侧数据并排 */
+.depot-data-split {
+    display: grid;
+    grid-template-columns: minmax(110px, max-content) minmax(0, 1fr);
+    gap: 14px;
+    align-items: start;
+}
+@media (max-width: 640px) {
+    .depot-data-split { grid-template-columns: 1fr; }
+    .depot-channels-col { flex-direction: row; flex-wrap: wrap; }
+}
+.depot-data-col { min-width: 0; }
+.depot-chan {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    font-size: 0.78rem;
+    cursor: pointer;
+    color: var(--text-secondary);
+    user-select: none;
+}
+.depot-chan.on {
+    border-color: var(--primary-color);
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+}
+.depot-chan input { margin: 0; cursor: pointer; }
+
+.depot-plot-note {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+.depot-plot-group {
+    margin-bottom: 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 6px 8px;
+}
+.depot-plot-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-bottom: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+.depot-zoom-btn {
+    border: 1px solid var(--border-color);
+    background: var(--card-bg);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    line-height: 1;
+    padding: 2px 6px;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+.depot-zoom-btn:hover {
+    border-color: var(--primary-color);
+    color: var(--text-primary);
+}
+/* 放大: 占满整行 */
+.depot-plot-grid .depot-plot-group.expanded {
+    grid-column: 1 / -1;
+}
+.depot-svg {
+    width: 100%;
+    height: auto;
+    display: block;
+    background: var(--bg-color);
+    border-radius: 6px;
+}
+.depot-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 6px;
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+}
+.depot-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.depot-legend i {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    display: inline-block;
+}
+.depot-video, .depot-frame {
+    width: 100%;
+    min-height: 200px;
+    border-radius: 6px;
+    background: #000;
+    display: block;
+    object-fit: contain;
+    margin-top: 12px;
+}
+
+/* ===== Depot 布局: 相机上方横排, 数据下方两列 ===== */
+/* 紧凑卡片 */
+.depot-compact {
+    padding: 12px 14px;
+    margin-bottom: 10px;
+}
+.depot-compact .card-title {
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+}
+/* 标题右侧信息行: 帧数 / 帧数据 / 当前帧 并排 */
+.depot-info-line {
+    display: inline-flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+}
+.depot-info-line .depot-readout-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+/* 数据卡标题行: 标题 + 机械单元 chips 横排 + 信息行, 左对齐 */
+.depot-data-title {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+}
+/* 播放控制 + 倍速 */
+.depot-play-ctrl {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: auto;
+}
+.depot-speed {
+    font-size: 0.8rem;
+    font-weight: normal;
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.depot-speed select {
+    font-size: 0.8rem;
+    padding: 2px 4px;
+}
+.depot-channels-inline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 0;
+}
+/* 轨迹图悬浮光标可交互 */
+.depot-svg { cursor: crosshair; }
+.depot-cursor { pointer-events: none; }
+
+/* 相机: 上方横排, 最多 3 个 */
+.depot-video-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+@media (max-width: 720px) {
+    .depot-video-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.depot-video-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-bottom: 3px;
+}
+.depot-video-row .depot-video,
+.depot-video-row .depot-frame {
+    margin-top: 0;
+    min-height: 0;
+    aspect-ratio: 4 / 3;
+}
+
+/* 数据: 下方两列网格 */
+.depot-plot-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+@media (max-width: 760px) {
+    .depot-plot-grid { grid-template-columns: 1fr; }
+}
+.depot-plot-grid .depot-plot-group { margin-bottom: 0; }
+
+/* 帧数据读出: 行内横排 */
+.depot-readout-bar {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+.depot-readout-title {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+.depot-readout-inline {
+    margin-bottom: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+}
+.depot-ro-block {
+    min-width: 200px;
+}
+.depot-ro-unit {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--primary-color);
+    margin: 8px 0 2px;
+}
+.depot-ro-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.depot-ro-table td {
+    padding: 2px 4px;
+    font-size: 0.78rem;
+    vertical-align: top;
+    border-bottom: 1px solid var(--border-color);
+}
+.depot-ro-key {
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+.depot-ro-val {
+    font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
+    text-align: right;
 }

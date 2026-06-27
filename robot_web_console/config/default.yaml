@@ -49,3 +49,7 @@ services:
 logging:
   level: "INFO"
   format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# 转化后数据集查看根目录(Depot 页面只读浏览)
+datasets:
+  root: "/workspace/piper_dataset/data"

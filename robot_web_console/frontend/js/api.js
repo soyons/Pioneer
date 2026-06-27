@@ -391,6 +391,33 @@ class RobotAPI {
         return this.request(`/info?top_n=${topN}`, { method: 'GET', _prefix: '/api/system' });
     }
 
+    // ============================================================
+    // Datasets / Depot API (前缀 /api/datasets/*) - 转化后数据集只读查看
+    // ============================================================
+    async listDatasets() {
+        return this.request('', { method: 'GET', _prefix: '/api/datasets' });
+    }
+
+    async getDataset(name) {
+        return this.request(`/${encodeURIComponent(name)}`, { method: 'GET', _prefix: '/api/datasets' });
+    }
+
+    async getEpisodeTrajectory(name, episodeIndex, keys = null) {
+        const q = keys ? `?keys=${encodeURIComponent(keys)}` : '';
+        return this.request(
+            `/${encodeURIComponent(name)}/episodes/${episodeIndex}/trajectory${q}`,
+            { method: 'GET', _prefix: '/api/datasets' });
+    }
+
+    // 视频/帧是 <video>/<img> 的 src,直接拼 URL(不走 fetch)
+    datasetVideoUrl(name, episodeIndex, key) {
+        return `/api/datasets/${encodeURIComponent(name)}/episodes/${episodeIndex}/video/${encodeURIComponent(key)}`;
+    }
+
+    datasetFrameUrl(name, episodeIndex, key, frameId) {
+        return `/api/datasets/${encodeURIComponent(name)}/episodes/${episodeIndex}/frame/${encodeURIComponent(key)}/${frameId}`;
+    }
+
     // === VR Connection ===
     async getVRStatus() {
         return this.request('/vr/status', { method: 'GET', _prefix: '/api/system' });

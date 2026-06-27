@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings, load_settings
-from .routes import proxy, services, system
+from .routes import proxy, services, system, datasets
 from .services.monitor import ServiceMonitor
 
 
@@ -60,6 +60,7 @@ app.add_middleware(
 # 注册路由
 app.include_router(services.router)
 app.include_router(system.router)
+app.include_router(datasets.router)
 app.include_router(proxy.camera_router)
 app.include_router(proxy.teleop_router)
 app.include_router(proxy.robot_router)
