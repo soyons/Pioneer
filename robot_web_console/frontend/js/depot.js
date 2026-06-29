@@ -105,10 +105,22 @@ const DepotPage = {
     },
 
     // ---- 机械单元解析 ----
+    // 适配 piper_dataset(LeRobot v2.1)下划线命名:
+    //   leftarm_*  rightarm_*  *_gripper_*  torso_*  base_*
+    // 兼容旧点号命名: observation.state.left_arm.*  action.left_arm.gripper
     unitOf(key) {
-        if (/\.gripper$/.test(key)) return 'gripper';
-        const s = key.replace(/^observation\.state\./, '').replace(/^action\./, '');
-        return s.split('.')[0] || 'other';
+        if (/gripper/.test(key)) return 'gripper';
+        // 旧点号命名: 去掉 observation.state. / action. 前缀后取首段
+        if (key.includes('.')) {
+            const s = key.replace(/^observation\.state\./, '').replace(/^action\./, '');
+            return s.split('.')[0] || 'other';
+        }
+        // 下划线命名: 按前缀归类
+        if (/^leftarm_/.test(key)) return 'left_arm';
+        if (/^rightarm_/.test(key)) return 'right_arm';
+        if (/^torso_/.test(key)) return 'torso';
+        if (/^base_/.test(key)) return 'base';
+        return key.split('_')[0] || 'other';
     },
 
     deriveUnits(numericKeys) {
