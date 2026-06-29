@@ -70,10 +70,12 @@ def _chassis_observation_features(chassis: ChassisSpec, prefix: str) -> dict:
 
 
 def _camera_observation_features(camera: CameraSpec, prefix: str) -> dict:
-    """N 路相机图像 feature，shape = [H, W, C]。"""
+    """N 路相机图像 feature,shape = [H, W, C],dtype = video(v2.1 风格)。"""
     meta = {
-        "dtype": "image",
+        "dtype": "video",
         "shape": [camera.height, camera.width, camera.channels],
+        "names": ["height", "width", "channels"],
+        "info": {"format": "rgb"},
     }
     if camera.fps is not None:
         meta["fps"] = camera.fps
