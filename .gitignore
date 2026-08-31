@@ -23,3 +23,6 @@ piper_dataset/data/
 
 # 临时命令/调试输出
 tmp
+
+# 外部仓库工作副本
+/dual_scorpion/
