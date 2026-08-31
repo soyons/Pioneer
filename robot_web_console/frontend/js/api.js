@@ -116,6 +116,15 @@ class RobotAPI {
         return ws;
     }
 
+    // URDF/model API
+    async getRobotModel() {
+        return this.get('/urdf');
+    }
+
+    async getRobotArmModel(arm) {
+        return this.get(`/urdf/${encodeURIComponent(arm)}`);
+    }
+
     // Close WebSocket
     closeWebSocket(channel) {
         if (this.websockets[channel]) {
@@ -185,8 +194,8 @@ class RobotAPI {
         });
     }
 
-    async jogCartesian(arm, axis, delta) {
-        return this.post('/jog/cartesian', { arm, axis, delta });
+    async jogCartesian(axis, deltaMm) {
+        return this.post('/jog/cartesian', { axis, delta: deltaMm });
     }
 
     async controlGripper(arm, position) {
@@ -195,6 +204,31 @@ class RobotAPI {
 
     async zeroJoint(arm, jointId = null) {
         return this.post('/jog/zero', { arm, joint_id: jointId });
+    }
+
+    async getDirectionCalibrationStatus() {
+        return this.get('/direction-calibration/status');
+    }
+
+    async probeJointDirection(jointId, acknowledged) {
+        return this.post('/direction-calibration/probe', {
+            joint_id: jointId,
+            acknowledged,
+        });
+    }
+
+    async recordJointDirection(jointId, matchesModel) {
+        return this.post('/direction-calibration/result', {
+            joint_id: jointId,
+            matches_model: matchesModel,
+        });
+    }
+
+    async zeroDirectionJoint(jointId, acknowledged) {
+        return this.post('/direction-calibration/zero', {
+            joint_id: jointId,
+            acknowledged,
+        });
     }
 
     async emergencyStop() {

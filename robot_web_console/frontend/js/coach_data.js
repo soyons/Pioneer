@@ -2,12 +2,24 @@
 const CoachDataPage = {
     statusTimer: null,
     statusIntervalMs: 1000,
+    vrDataTimer: null,
+    vrDataRefreshMs: 100,
+    pageGeneration: 0,
+    statusInFlightGeneration: null,
+    vrDataInFlightGeneration: null,
+    hasVRFrame: false,
+    lastVRFrameId: null,
     cameras: [],
     recording: false,
     episodeId: null,
     startedAt: null,
 
     async render(container) {
+        this.onLeave();
+        const generation = this.pageGeneration;
+        this.hasVRFrame = false;
+        this.lastVRFrameId = null;
+
         container.innerHTML = `
             <div class="card">
                 <div class="card-title">
@@ -54,6 +66,22 @@ const CoachDataPage = {
                 </p>
             </div>
 
+            <div class="card" id="coachVrPanel">
+                <div class="card-title coach-vr-title">
+                    <span>🎮 Quest 手柄实时数据</span>
+                    <span class="coach-vr-rate">10 Hz</span>
+                </div>
+                <div id="coachVrStreamState" class="coach-vr-stream waiting" role="status" aria-live="polite">
+                    <span class="coach-vr-stream-dot"></span>
+                    <span id="coachVrStreamText">正在等待 Quest 数据...</span>
+                    <span id="coachVrFrameMeta" class="coach-vr-frame-meta"></span>
+                </div>
+                <div class="coach-vr-grid">
+                    ${this.controllerCardMarkup('left', '左手柄', 'X', 'Y')}
+                    ${this.controllerCardMarkup('right', '右手柄', 'A', 'B')}
+                </div>
+            </div>
+
             <div class="card">
                 <div class="card-title">
                     <span>📷 实时画面</span>
@@ -68,7 +96,7 @@ const CoachDataPage = {
             </div>
         `;
 
-        document.getElementById('btnCoachRefresh').addEventListener('click', () => this.refreshAll());
+        document.getElementById('btnCoachRefresh').addEventListener('click', () => this.refreshAll(generation));
         document.getElementById('btnAddCollector').addEventListener('click', () => this.addCollector());
         document.getElementById('btnAddTask').addEventListener('click', () => this.addTask());
         document.getElementById('btnStartRec').addEventListener('click', () => this.startRecording());
@@ -76,14 +104,21 @@ const CoachDataPage = {
         document.getElementById('btnStopFailure').addEventListener('click', () => this.stopRecording('failure'));
         document.getElementById('btnToggleCams').addEventListener('click', () => this.toggleCameras());
 
-        await this.refreshAll();
-        this.statusTimer = setInterval(() => this.pollStatus(), this.statusIntervalMs);
+        await this.refreshAll(generation);
+        if (!this.isCurrent(generation)) return;
+        this.scheduleStatusPoll(generation);
+        this.scheduleVRDataPoll(generation);
     },
 
     onLeave() {
+        this.pageGeneration += 1;
         if (this.statusTimer) {
-            clearInterval(this.statusTimer);
+            clearTimeout(this.statusTimer);
             this.statusTimer = null;
+        }
+        if (this.vrDataTimer) {
+            clearTimeout(this.vrDataTimer);
+            this.vrDataTimer = null;
         }
         // 停掉所有相机流，释放带宽
         const previews = document.querySelectorAll('#coachCameras .camera-preview.active');
@@ -95,17 +130,99 @@ const CoachDataPage = {
         });
     },
 
-    async refreshAll() {
+    isCurrent(generation) {
+        const appActive = !window.app || window.app.currentPage === 'coachdata';
+        return this.pageGeneration === generation && appActive && !!document.getElementById('coachVrPanel');
+    },
+
+    async refreshAll(generation = this.pageGeneration) {
         await Promise.all([
             this.loadCollectors(),
             this.loadTasks(),
             this.loadCameras(),
             this.loadEpisodes(),
-            this.pollStatus(),
+            this.pollStatus(generation),
+            this.refreshVRData(generation),
         ]);
     },
 
-    // PLACEHOLDER_METHODS
+    controllerCardMarkup(side, title, faceA, faceB) {
+        const id = field => `coach-vr-${side}-${field}`;
+        return `
+            <section class="coach-vr-controller is-unavailable" id="${id('card')}" aria-labelledby="${id('title')}">
+                <div class="coach-vr-controller-header">
+                    <h3 id="${id('title')}">${title}</h3>
+                    <span class="coach-vr-connection" id="${id('connection')}">等待数据</span>
+                </div>
+
+                <div class="coach-vr-section-label">Position</div>
+                <div class="coach-vr-values coach-vr-values-position">
+                    ${this.vrValueMarkup(side, 'pos-x', 'X')}
+                    ${this.vrValueMarkup(side, 'pos-y', 'Y')}
+                    ${this.vrValueMarkup(side, 'pos-z', 'Z')}
+                </div>
+
+                <div class="coach-vr-section-label">Rotation · Quaternion</div>
+                <div class="coach-vr-values coach-vr-values-rotation">
+                    ${this.vrValueMarkup(side, 'rot-x', 'x')}
+                    ${this.vrValueMarkup(side, 'rot-y', 'y')}
+                    ${this.vrValueMarkup(side, 'rot-z', 'z')}
+                    ${this.vrValueMarkup(side, 'rot-w', 'w')}
+                </div>
+
+                <div class="coach-vr-analog-grid">
+                    ${this.vrAnalogMarkup(side, 'trigger', 'Trigger')}
+                    ${this.vrAnalogMarkup(side, 'grip', 'Grip')}
+                </div>
+
+                <div class="coach-vr-stick-row">
+                    <div>
+                        <div class="coach-vr-section-label">Joystick</div>
+                        <div class="coach-vr-stick-values">
+                            <span>X <b id="${id('stick-x')}">—</b></span>
+                            <span>Y <b id="${id('stick-y')}">—</b></span>
+                        </div>
+                    </div>
+                    <div class="coach-vr-stick" id="${id('stick')}" role="img" aria-label="Joystick X —, Y —">
+                        <span class="coach-vr-stick-axis horizontal"></span>
+                        <span class="coach-vr-stick-axis vertical"></span>
+                        <span class="coach-vr-stick-dot" id="${id('stick-dot')}"></span>
+                    </div>
+                </div>
+
+                <div class="coach-vr-section-label">Buttons</div>
+                <div class="coach-vr-buttons">
+                    ${this.vrButtonMarkup(side, 'btn-a', faceA)}
+                    ${this.vrButtonMarkup(side, 'btn-b', faceB)}
+                    ${this.vrButtonMarkup(side, 'stick-click', 'Stick')}
+                    ${this.vrButtonMarkup(side, 'menu', 'Menu')}
+                </div>
+            </section>
+        `;
+    },
+
+    vrValueMarkup(side, field, label) {
+        return `<span class="coach-vr-value"><small>${label}</small><b id="coach-vr-${side}-${field}">—</b></span>`;
+    },
+
+    vrAnalogMarkup(side, field, label) {
+        return `
+            <div class="coach-vr-analog">
+                <div class="coach-vr-analog-label">
+                    <span>${label}</span>
+                    <b id="coach-vr-${side}-${field}-value">—</b>
+                </div>
+                <div class="coach-vr-bar" id="coach-vr-${side}-${field}-bar" role="progressbar" aria-label="${label}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                    <span id="coach-vr-${side}-${field}-fill"></span>
+                </div>
+            </div>
+        `;
+    },
+
+    vrButtonMarkup(side, field, label) {
+        return `<span class="coach-vr-button" id="coach-vr-${side}-${field}" aria-pressed="false">${label} · 释放</span>`;
+    },
+
     async loadCollectors() {
         try {
             const data = await api.listCollectors();
@@ -320,16 +437,187 @@ const CoachDataPage = {
         }
     },
 
-    async pollStatus() {
+    async pollStatus(generation = this.pageGeneration) {
+        if (!this.isCurrent(generation) || this.statusInFlightGeneration === generation) return;
+        this.statusInFlightGeneration = generation;
         try {
             const s = await api.getRecordingStatus();
+            if (!this.isCurrent(generation)) return;
             this.recording = !!s.recording;
             this.episodeId = s.episode_id || null;
             this.startedAt = s.started_at || null;
             this.renderStatus(s);
         } catch (e) {
             // coach 未启动时静默
+        } finally {
+            if (this.statusInFlightGeneration === generation) {
+                this.statusInFlightGeneration = null;
+            }
         }
+    },
+
+    scheduleStatusPoll(generation) {
+        if (!this.isCurrent(generation)) return;
+        if (this.statusTimer) clearTimeout(this.statusTimer);
+        this.statusTimer = setTimeout(async () => {
+            this.statusTimer = null;
+            await this.pollStatus(generation);
+            this.scheduleStatusPoll(generation);
+        }, this.statusIntervalMs);
+    },
+
+    async refreshVRData(generation = this.pageGeneration) {
+        if (!this.isCurrent(generation) || this.vrDataInFlightGeneration === generation) return;
+        this.vrDataInFlightGeneration = generation;
+        try {
+            const res = await api.getTeleopVRData();
+            if (!this.isCurrent(generation)) return;
+            if (!res.connected || !res.data) {
+                this.renderVRUnavailable();
+                return;
+            }
+            this.hasVRFrame = true;
+            const frameId = Number(res.data.quest_t);
+            this.lastVRFrameId = Number.isFinite(frameId) ? frameId : null;
+            this.renderVRStreamState('live', 'Quest 数据接收正常', res.data);
+            this.renderVRController('left', res.data.left);
+            this.renderVRController('right', res.data.right);
+        } catch (e) {
+            if (!this.isCurrent(generation)) return;
+            const message = this.hasVRFrame
+                ? '实时数据请求失败，保留最后一帧'
+                : '无法获取 Quest 数据';
+            this.renderVRStreamState('error', message, this.hasVRFrame ? { quest_t: this.lastVRFrameId } : null);
+            if (!this.hasVRFrame) {
+                this.renderVRController('left', null);
+                this.renderVRController('right', null);
+            }
+        } finally {
+            if (this.vrDataInFlightGeneration === generation) {
+                this.vrDataInFlightGeneration = null;
+            }
+        }
+    },
+
+    scheduleVRDataPoll(generation) {
+        if (!this.isCurrent(generation)) return;
+        if (this.vrDataTimer) clearTimeout(this.vrDataTimer);
+        this.vrDataTimer = setTimeout(async () => {
+            this.vrDataTimer = null;
+            await this.refreshVRData(generation);
+            this.scheduleVRDataPoll(generation);
+        }, this.vrDataRefreshMs);
+    },
+
+    renderVRUnavailable() {
+        this.hasVRFrame = false;
+        this.lastVRFrameId = null;
+        this.renderVRStreamState('waiting', '正在等待 Quest 数据...');
+        this.renderVRController('left', null);
+        this.renderVRController('right', null);
+    },
+
+    renderVRStreamState(state, message, frame = null) {
+        const container = document.getElementById('coachVrStreamState');
+        const text = document.getElementById('coachVrStreamText');
+        const meta = document.getElementById('coachVrFrameMeta');
+        if (!container || !text || !meta) return;
+        container.className = `coach-vr-stream ${state}`;
+        text.textContent = message;
+        meta.textContent = frame && Number.isFinite(Number(frame.quest_t))
+            ? `Frame ${Math.trunc(Number(frame.quest_t))}`
+            : '';
+    },
+
+    renderVRController(side, data) {
+        const card = document.getElementById(`coach-vr-${side}-card`);
+        const connection = document.getElementById(`coach-vr-${side}-connection`);
+        if (!card || !connection) return;
+
+        const available = !!data;
+        const connected = available && data.connected !== false;
+        card.classList.toggle('is-unavailable', !available);
+        card.classList.toggle('is-disconnected', available && !connected);
+        card.classList.toggle('is-connected', connected);
+        connection.textContent = available ? (connected ? '● 已连接' : '○ 未连接') : '等待数据';
+
+        const pos = Array.isArray(data?.pos) ? data.pos : [];
+        const rot = Array.isArray(data?.rot) ? data.rot : [];
+        this.setVRText(side, 'pos-x', this.formatVRNumber(pos[0], 3));
+        this.setVRText(side, 'pos-y', this.formatVRNumber(pos[1], 3));
+        this.setVRText(side, 'pos-z', this.formatVRNumber(pos[2], 3));
+        this.setVRText(side, 'rot-x', this.formatVRNumber(rot[0], 3));
+        this.setVRText(side, 'rot-y', this.formatVRNumber(rot[1], 3));
+        this.setVRText(side, 'rot-z', this.formatVRNumber(rot[2], 3));
+        this.setVRText(side, 'rot-w', this.formatVRNumber(rot[3], 3));
+
+        this.renderVRAnalog(side, 'trigger', available ? data.trigger : null);
+        this.renderVRAnalog(side, 'grip', available ? data.grip : null);
+        this.renderVRStick(side, available ? data.stick_x : null, available ? data.stick_y : null);
+        this.renderVRButton(side, 'btn-a', side === 'left' ? 'X' : 'A', available ? data.btn_a === true : null);
+        this.renderVRButton(side, 'btn-b', side === 'left' ? 'Y' : 'B', available ? data.btn_b === true : null);
+        this.renderVRButton(side, 'stick-click', 'Stick', available ? data.stick_click === true : null);
+        this.renderVRButton(side, 'menu', 'Menu', available ? data.menu === true : null);
+    },
+
+    setVRText(side, field, value) {
+        const el = document.getElementById(`coach-vr-${side}-${field}`);
+        if (el) el.textContent = value;
+    },
+
+    formatVRNumber(value, digits = 3) {
+        const n = Number(value);
+        return Number.isFinite(n) ? n.toFixed(digits) : '—';
+    },
+
+    clampVRValue(value, min, max) {
+        const n = Number(value);
+        if (!Number.isFinite(n)) return null;
+        return Math.min(max, Math.max(min, n));
+    },
+
+    renderVRAnalog(side, field, value) {
+        const n = this.clampVRValue(value, 0, 1);
+        const valueEl = document.getElementById(`coach-vr-${side}-${field}-value`);
+        const bar = document.getElementById(`coach-vr-${side}-${field}-bar`);
+        const fill = document.getElementById(`coach-vr-${side}-${field}-fill`);
+        const pct = n == null ? 0 : Math.round(n * 100);
+        if (valueEl) valueEl.textContent = n == null ? '—' : `${n.toFixed(2)} · ${pct}%`;
+        if (fill) fill.style.width = `${pct}%`;
+        if (bar) bar.setAttribute('aria-valuenow', String(pct));
+    },
+
+    renderVRStick(side, xValue, yValue) {
+        const x = this.clampVRValue(xValue, -1, 1);
+        const y = this.clampVRValue(yValue, -1, 1);
+        this.setVRText(side, 'stick-x', x == null ? '—' : x.toFixed(2));
+        this.setVRText(side, 'stick-y', y == null ? '—' : y.toFixed(2));
+
+        const stick = document.getElementById(`coach-vr-${side}-stick`);
+        const dot = document.getElementById(`coach-vr-${side}-stick-dot`);
+        if (dot) {
+            const px = x == null ? 50 : 50 + x * 36;
+            const py = y == null ? 50 : 50 - y * 36;
+            dot.style.left = `${px}%`;
+            dot.style.top = `${py}%`;
+        }
+        if (stick) {
+            const xText = x == null ? '—' : x.toFixed(2);
+            const yText = y == null ? '—' : y.toFixed(2);
+            stick.setAttribute('aria-label', `Joystick X ${xText}, Y ${yText}`);
+        }
+    },
+
+    renderVRButton(side, field, label, pressed) {
+        const el = document.getElementById(`coach-vr-${side}-${field}`);
+        if (!el) return;
+        const isPressed = pressed === true;
+        el.classList.toggle('is-pressed', isPressed);
+        el.classList.toggle('is-unavailable', pressed == null);
+        el.setAttribute('aria-pressed', pressed == null ? 'false' : String(isPressed));
+        el.textContent = pressed == null
+            ? `${label} · —`
+            : `${label} · ${isPressed ? '按下' : '释放'}`;
     },
 
     renderStatus(s) {
