@@ -198,6 +198,21 @@ class RobotAPI {
         return this.post('/jog/cartesian', { axis, delta: deltaMm });
     }
 
+    async solveJointPositions(dxMm, dyMm, dzMm) {
+        return this.post('/jog/joints/solve', {
+            dx: dxMm,
+            dy: dyMm,
+            dz: dzMm,
+        });
+    }
+
+    async sendJointPositions(jointPositions) {
+        if (!Array.isArray(jointPositions)) {
+            throw new TypeError('jointPositions must be an array of radians');
+        }
+        return this.post('/jog/joints', { joint_positions: jointPositions });
+    }
+
     async controlGripper(arm, position) {
         return this.post('/jog/gripper', { arm, position });
     }

@@ -14,6 +14,10 @@ class RobotApp {
         this.jogLastStatus = null;
         this.directionCalibration = null;
         this.directionCalibrationInFlight = false;
+        this.eefSolveInFlight = false;
+        this.eefSendInFlight = false;
+        this.pendingEefSolve = null;
+        this.eefRequestSeq = 0;
 
         this.init();
     }
@@ -59,6 +63,7 @@ class RobotApp {
             if (confirm('确定要急停吗？这将立即停止所有运动。')) {
                 try {
                     await api.emergencyStop();
+                    this.clearEefSolve();
                     this.showNotification('急停已触发', 'danger');
                 } catch (error) {
                     this.showNotification(`急停失败: ${error.message}`, 'danger');
@@ -416,6 +421,24 @@ class RobotApp {
                         </div>
                     </div>
                     <div class="card mt-4">
+                        <div class="card-title">🎯 EEF Translation Solve (base_link)</div>
+                        <p class="text-muted">先解算、后确认发送。输入末端平移增量（mm），姿态保持不变；解算不会移动机器人。</p>
+                        <div class="eef-delta-grid">
+                            ${['x', 'y', 'z'].map(axis => `
+                                <div class="form-group">
+                                    <label class="form-label" for="eefDelta${axis.toUpperCase()}">Δ${axis.toUpperCase()} (mm)</label>
+                                    <input id="eefDelta${axis.toUpperCase()}" class="form-input eef-delta-input" type="number" step="0.1" value="0" inputmode="decimal">
+                                </div>
+                            `).join('')}
+                        </div>
+                        <div class="jog-button-row">
+                            <button id="eefSolveButton" class="btn btn-primary jog-motion-control">Solve IK</button>
+                            <button id="eefClearButton" class="btn btn-secondary" type="button">Clear</button>
+                        </div>
+                        <div id="eefSolveResult" class="eef-solve-result" hidden></div>
+                    </div>
+
+                    <div class="card mt-4">
                         <div class="card-title">📐 Cartesian XYZ Jog (base_link)</div>
                         <p class="text-muted">固定基座坐标：+X 前方、+Y 左侧、+Z 上方。每次移动严格保持当前末端姿态。</p>
                         ${['x', 'y', 'z'].map(axis => `
@@ -470,8 +493,11 @@ class RobotApp {
         const valueDisplay = document.getElementById('gripperValue');
         const armSelect = document.getElementById('jogArm');
         armSelect.addEventListener('change', () => {
+            this.clearEefSolve();
             if (this.jogLastStatus) this.updateJogStatusDisplay(this.jogLastStatus);
         });
+        document.getElementById('eefSolveButton').addEventListener('click', () => this.solveEefDelta());
+        document.getElementById('eefClearButton').addEventListener('click', () => this.clearEefSolve());
         slider.addEventListener('input', (event) => {
             valueDisplay.textContent = parseFloat(event.target.value).toFixed(2);
         });
@@ -608,6 +634,7 @@ class RobotApp {
                 Array.isArray(positions) && positions.length > 0 && positions.every(Number.isFinite)
             );
             const connected = validArms.some(([arm]) => Boolean(status.connected?.[arm]));
+            if (!connected && this.pendingEefSolve) this.clearEefSolve();
             this.setJogControlsEnabled(connected);
             return connected;
         } catch (error) {
@@ -634,11 +661,12 @@ class RobotApp {
 
     setJogControlsEnabled(connected) {
         this.jogControlsConnected = connected;
-        const enabled = connected && !this.jogCommandInFlight;
+        const enabled = connected && !this.jogCommandInFlight && !this.eefSolveInFlight && !this.eefSendInFlight;
         document.querySelectorAll('.jog-motion-control').forEach(control => {
             control.disabled = !enabled;
         });
         this.updateDirectionCalibrationControls();
+        this.updateEefSolveControls();
     }
 
     setJogCommandInFlight(inFlight) {
@@ -654,6 +682,7 @@ class RobotApp {
         try {
             this.directionCalibration = await api.getDirectionCalibrationStatus();
             this.renderDirectionCalibrationStatus();
+            if (!this.directionCalibration?.all_verified && this.pendingEefSolve) this.clearEefSolve();
             this.updateDirectionCalibrationControls();
             return Boolean(this.directionCalibration?.all_verified);
         } catch (error) {
@@ -743,6 +772,8 @@ class RobotApp {
         );
         const motionAllowed = this.jogControlsConnected
             && !this.jogCommandInFlight
+            && !this.eefSolveInFlight
+            && !this.eefSendInFlight
             && !this.directionCalibrationInFlight;
 
         probeButton.disabled = !(motionAllowed && ack.checked);
@@ -817,6 +848,245 @@ class RobotApp {
         }
     }
 
+    updateEefSolveControls() {
+        const solveButton = document.getElementById('eefSolveButton');
+        const clearButton = document.getElementById('eefClearButton');
+        if (!solveButton || !clearButton) return;
+        const blocked = !this.jogControlsConnected || this.jogCommandInFlight
+            || this.eefSolveInFlight || this.eefSendInFlight
+            || !this.directionCalibration?.all_verified;
+        solveButton.disabled = blocked;
+        clearButton.disabled = this.eefSolveInFlight || this.eefSendInFlight;
+        const confirmButton = document.getElementById('eefSendButton');
+        if (confirmButton) {
+            confirmButton.disabled = blocked || !this.pendingEefSolve;
+        }
+    }
+
+    clearEefSolve() {
+        this.eefRequestSeq += 1;
+        this.pendingEefSolve = null;
+        const resultEl = document.getElementById('eefSolveResult');
+        if (resultEl) {
+            resultEl.hidden = true;
+            resultEl.replaceChildren();
+        }
+        this.updateEefSolveControls();
+    }
+
+    eefFiniteVector(values, length = null) {
+        return Array.isArray(values)
+            && (length === null || values.length === length)
+            && values.every(value => Number.isFinite(value));
+    }
+
+    eefFormatVector(values, scale = 1, digits = 3) {
+        return values.map(value => (Number(value) * scale).toFixed(digits)).join(', ');
+    }
+
+    renderEefSolve(result) {
+        const resultEl = document.getElementById('eefSolveResult');
+        if (!resultEl) return;
+        resultEl.replaceChildren();
+        resultEl.hidden = false;
+
+        const title = document.createElement('div');
+        title.id = 'eefSolveStatus';
+        title.className = 'eef-solve-status status-badge success';
+        title.textContent = 'IK solved · not sent';
+        resultEl.appendChild(title);
+
+        const metrics = document.createElement('div');
+        metrics.className = 'eef-solve-metrics';
+        const delta = result.delta_mm || {};
+        const rows = [
+            ['Requested Δ (mm)', `${Number(delta.x).toFixed(1)}, ${Number(delta.y).toFixed(1)}, ${Number(delta.z).toFixed(1)}`],
+            ['Frame', result.frame || 'base_link'],
+            ['Target XYZ (m)', this.eefFormatVector(result.target_position_m)],
+            ['Position error', `${Number(result.position_error_mm).toFixed(3)} mm`],
+            ['Orientation error', `${Number(result.orientation_error_deg).toFixed(3)}°`],
+            ['Max joint delta', `${Number(result.max_joint_delta_deg).toFixed(2)}°`],
+        ];
+        rows.forEach(([label, value]) => {
+            const row = document.createElement('div');
+            row.className = 'eef-metric-row';
+            row.innerHTML = `<span>${label}</span><strong></strong>`;
+            row.querySelector('strong').textContent = value;
+            metrics.appendChild(row);
+        });
+        resultEl.appendChild(metrics);
+
+        const jointTable = document.createElement('div');
+        jointTable.className = 'eef-joint-table';
+        const current = result.current_joints_rad;
+        const target = result.target_joints_rad;
+        const header = document.createElement('div');
+        header.className = 'eef-joint-header';
+        ['Joint', 'Current (°)', 'Target / Jog (°)'].forEach(text => {
+            const cell = document.createElement('span');
+            cell.textContent = text;
+            header.appendChild(cell);
+        });
+        jointTable.appendChild(header);
+        current.forEach((value, index) => {
+            const row = document.createElement('div');
+            row.className = 'eef-joint-row';
+
+            const name = document.createElement('span');
+            name.textContent = `J${index + 1}`;
+            row.appendChild(name);
+
+            const currentValue = document.createElement('span');
+            currentValue.textContent = `${(Number(value) * 180 / Math.PI).toFixed(2)}°`;
+            row.appendChild(currentValue);
+
+            const targetLabel = document.createElement('label');
+            targetLabel.className = 'eef-joint-input-wrap';
+            targetLabel.setAttribute('aria-label', `Joint ${index + 1} target angle in degrees`);
+            const input = document.createElement('input');
+            input.className = 'form-input eef-joint-input';
+            input.type = 'number';
+            input.step = '0.01';
+            input.inputMode = 'decimal';
+            input.dataset.jointIndex = String(index);
+            input.value = (Number(target[index]) * 180 / Math.PI).toFixed(2);
+            input.addEventListener('input', () => {
+                const status = document.getElementById('eefSolveStatus');
+                if (status) {
+                    status.textContent = 'IK solved · target edited · not sent';
+                    status.classList.remove('success');
+                    status.classList.add('warning');
+                }
+            });
+            targetLabel.appendChild(input);
+            const unit = document.createElement('span');
+            unit.textContent = '°';
+            unit.className = 'eef-joint-unit';
+            targetLabel.appendChild(unit);
+            row.appendChild(targetLabel);
+            jointTable.appendChild(row);
+        });
+        resultEl.appendChild(jointTable);
+
+        const actions = document.createElement('div');
+        actions.className = 'jog-button-row eef-solve-actions';
+        actions.innerHTML = '<button id="eefSendButton" class="btn btn-warning">Confirm &amp; Send</button><button id="eefCancelButton" class="btn btn-secondary">Cancel</button>';
+        actions.querySelector('#eefSendButton').addEventListener('click', () => this.sendSolvedJointPositions());
+        actions.querySelector('#eefCancelButton').addEventListener('click', () => this.clearEefSolve());
+        resultEl.appendChild(actions);
+        this.updateEefSolveControls();
+    }
+
+    async solveEefDelta() {
+        if (this.eefSolveInFlight || this.eefSendInFlight || this.jogCommandInFlight) return;
+        const values = ['X', 'Y', 'Z'].map(axis => Number(document.getElementById(`eefDelta${axis}`)?.value));
+        if (!values.every(Number.isFinite) || values.every(value => value === 0)) {
+            this.showNotification('请输入至少一个非零的有效 EEF 位移', 'warning');
+            return;
+        }
+        if (!this.jogControlsConnected || !this.directionCalibration?.all_verified) {
+            this.showNotification('机器人未连接或方向校验尚未完成', 'warning');
+            return;
+        }
+
+        const requestSeq = ++this.eefRequestSeq;
+        this.clearEefSolve();
+        this.eefRequestSeq = requestSeq;
+        this.eefSolveInFlight = true;
+        this.updateEefSolveControls();
+        try {
+            const result = await api.solveJointPositions(...values);
+            if (requestSeq !== this.eefRequestSeq || this.currentPage !== 'jog') return;
+            const current = result?.current_joints_rad;
+            const target = result?.target_joints_rad;
+            if (result?.success !== true || result.status !== 'solved' || result.unit !== 'rad'
+                || !this.eefFiniteVector(current) || !this.eefFiniteVector(target)
+                || current.length !== target.length || current.length === 0
+                || !this.eefFiniteVector(result.target_position_m, 3)
+                || !this.eefFiniteVector(result.current_position_m, 3)
+                || !this.eefFiniteVector(result.predicted_position_m, 3)) {
+                throw new Error('IK 返回数据无效');
+            }
+            this.pendingEefSolve = {
+                ...result,
+                current_joints_rad: current.map(Number),
+                target_joints_rad: target.map(Number),
+            };
+            this.renderEefSolve(this.pendingEefSolve);
+            this.showNotification('EEF 解算完成，请检查结果后确认发送', 'success');
+        } catch (error) {
+            if (requestSeq === this.eefRequestSeq) {
+                this.pendingEefSolve = null;
+                this.showNotification(`EEF 解算失败: ${error.message}`, 'danger');
+                const resultEl = document.getElementById('eefSolveResult');
+                if (resultEl) {
+                    resultEl.hidden = false;
+                    resultEl.textContent = `解算失败: ${error.message}`;
+                }
+            }
+        } finally {
+            if (requestSeq === this.eefRequestSeq) {
+                this.eefSolveInFlight = false;
+                this.updateEefSolveControls();
+            }
+        }
+    }
+
+    async sendSolvedJointPositions() {
+        const pending = this.pendingEefSolve;
+        if (!pending || this.eefSolveInFlight || this.eefSendInFlight || this.jogCommandInFlight) return;
+        const target = pending.target_joints_rad;
+        const inputs = [...document.querySelectorAll('.eef-joint-input')];
+        if (inputs.length !== target.length) {
+            this.showNotification('关节列表不完整，请重新解算', 'warning');
+            return;
+        }
+        const targetDegrees = inputs.map(input => Number(input.value));
+        if (!targetDegrees.every(Number.isFinite)) {
+            this.showNotification('所有关节角必须是有效数字', 'warning');
+            return;
+        }
+        const editedTarget = targetDegrees.map(value => value * Math.PI / 180);
+        if (!this.eefFiniteVector(editedTarget, target.length)) {
+            this.showNotification('关节目标数据无效，请重新解算', 'warning');
+            return;
+        }
+        if (!this.jogControlsConnected || !this.directionCalibration?.all_verified) {
+            this.clearEefSolve();
+            this.showNotification('解算结果已失效，请重新解算', 'warning');
+            return;
+        }
+        const maxDelta = Number(pending.max_joint_delta_deg);
+        const positionError = Number(pending.position_error_mm);
+        if (!Number.isFinite(maxDelta) || !Number.isFinite(positionError)) {
+            this.clearEefSolve();
+            this.showNotification('解算误差数据无效，请重新解算', 'warning');
+            return;
+        }
+        const deltaSummary = editedTarget.map((value, index) => {
+            const delta = (value - Number(pending.current_joints_rad[index])) * 180 / Math.PI;
+            return `J${index + 1} ${delta >= 0 ? '+' : ''}${delta.toFixed(2)}°`;
+        }).join(', ');
+        if (!confirm(`确认一次性发送全部 ${editedTarget.length} 个关节目标？\n${deltaSummary}\n这将移动机器人。`)) return;
+        this.pendingEefSolve = null;
+        this.eefSendInFlight = true;
+        this.updateEefSolveControls();
+        try {
+            const result = await api.sendJointPositions(editedTarget.slice());
+            this.showNotification(
+                result.clamped ? '关节目标已发送，但部分关节被限制' : 'EEF 关节目标已发送',
+                result.clamped ? 'warning' : 'success'
+            );
+            await this.refreshJogStatus();
+            this.clearEefSolve();
+        } catch (error) {
+            this.showNotification(`EEF 目标发送失败: ${error.message}`, 'danger');
+        } finally {
+            this.eefSendInFlight = false;
+            this.updateEefSolveControls();
+        }
+    }
+
     disposeJogPage() {
         this.jogPageGeneration += 1;
         if (this.jogStateInterval) {
@@ -833,6 +1103,10 @@ class RobotApp {
         this.jogLastStatus = null;
         this.directionCalibration = null;
         this.directionCalibrationInFlight = false;
+        this.eefSolveInFlight = false;
+        this.eefSendInFlight = false;
+        this.pendingEefSolve = null;
+        this.eefRequestSeq += 1;
     }
 
     async jogJoint(delta) {

@@ -76,6 +76,25 @@ const CoachDataPage = {
                     <span id="coachVrStreamText">正在等待 Quest 数据...</span>
                     <span id="coachVrFrameMeta" class="coach-vr-frame-meta"></span>
                 </div>
+                <section class="coach-vr-head is-unavailable" id="coach-vr-head" aria-labelledby="coach-vr-head-title">
+                    <div class="coach-vr-controller-header">
+                        <h3 id="coach-vr-head-title">头显</h3>
+                        <span class="coach-vr-connection" id="coach-vr-head-connection">等待数据</span>
+                    </div>
+                    <div class="coach-vr-section-label">Position</div>
+                    <div class="coach-vr-values coach-vr-values-position">
+                        ${this.vrValueMarkup('head', 'pos-x', 'X')}
+                        ${this.vrValueMarkup('head', 'pos-y', 'Y')}
+                        ${this.vrValueMarkup('head', 'pos-z', 'Z')}
+                    </div>
+                    <div class="coach-vr-section-label">Rotation · Quaternion</div>
+                    <div class="coach-vr-values coach-vr-values-rotation">
+                        ${this.vrValueMarkup('head', 'rot-x', 'x')}
+                        ${this.vrValueMarkup('head', 'rot-y', 'y')}
+                        ${this.vrValueMarkup('head', 'rot-z', 'z')}
+                        ${this.vrValueMarkup('head', 'rot-w', 'w')}
+                    </div>
+                </section>
                 <div class="coach-vr-grid">
                     ${this.controllerCardMarkup('left', '左手柄', 'X', 'Y')}
                     ${this.controllerCardMarkup('right', '右手柄', 'A', 'B')}
@@ -480,6 +499,7 @@ const CoachDataPage = {
             const frameId = Number(res.data.quest_t);
             this.lastVRFrameId = Number.isFinite(frameId) ? frameId : null;
             this.renderVRStreamState('live', 'Quest 数据接收正常', res.data);
+            this.renderVRHead(res.data.head);
             this.renderVRController('left', res.data.left);
             this.renderVRController('right', res.data.right);
         } catch (e) {
@@ -489,6 +509,7 @@ const CoachDataPage = {
                 : '无法获取 Quest 数据';
             this.renderVRStreamState('error', message, this.hasVRFrame ? { quest_t: this.lastVRFrameId } : null);
             if (!this.hasVRFrame) {
+                this.renderVRHead(null);
                 this.renderVRController('left', null);
                 this.renderVRController('right', null);
             }
@@ -513,8 +534,30 @@ const CoachDataPage = {
         this.hasVRFrame = false;
         this.lastVRFrameId = null;
         this.renderVRStreamState('waiting', '正在等待 Quest 数据...');
+        this.renderVRHead(null);
         this.renderVRController('left', null);
         this.renderVRController('right', null);
+    },
+
+    renderVRHead(data) {
+        const card = document.getElementById('coach-vr-head');
+        const connection = document.getElementById('coach-vr-head-connection');
+        if (!card || !connection) return;
+
+        const available = !!data;
+        card.classList.toggle('is-unavailable', !available);
+        card.classList.toggle('is-connected', available);
+        connection.textContent = available ? '● 已追踪' : '等待数据';
+
+        const pos = Array.isArray(data?.pos) ? data.pos : [];
+        const rot = Array.isArray(data?.rot) ? data.rot : [];
+        this.setVRText('head', 'pos-x', this.formatVRNumber(pos[0], 3));
+        this.setVRText('head', 'pos-y', this.formatVRNumber(pos[1], 3));
+        this.setVRText('head', 'pos-z', this.formatVRNumber(pos[2], 3));
+        this.setVRText('head', 'rot-x', this.formatVRNumber(rot[0], 3));
+        this.setVRText('head', 'rot-y', this.formatVRNumber(rot[1], 3));
+        this.setVRText('head', 'rot-z', this.formatVRNumber(rot[2], 3));
+        this.setVRText('head', 'rot-w', this.formatVRNumber(rot[3], 3));
     },
 
     renderVRStreamState(state, message, frame = null) {
