@@ -44,6 +44,15 @@ class DatasetsConfig(BaseModel):
     root: str = "/workspace/piper_dataset/data"
 
 
+class MonitorConfig(BaseModel):
+    """后端服务健康探测配置。
+
+    Jetson 上探测本身有成本（HTTP + 各服务的状态查询），
+    间隔不要低于三灯的可读性需求。
+    """
+    check_interval: float = 5.0
+
+
 class Settings(BaseModel):
     """全局配置"""
     mode: str = "production"  # Literal 在 Python 3.6 需要 typing_extensions
@@ -51,6 +60,7 @@ class Settings(BaseModel):
     services: Dict[str, ServiceConfig]
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     datasets: DatasetsConfig = Field(default_factory=DatasetsConfig)
+    monitor: MonitorConfig = Field(default_factory=MonitorConfig)
 
     @classmethod
     def from_yaml(cls, config_path: Path):

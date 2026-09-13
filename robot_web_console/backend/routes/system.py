@@ -1,8 +1,9 @@
 """系统资源监控路由 - CPU / 内存 / 磁盘 / 进程 / VR 连接"""
+import asyncio
 import os
 import time
 import subprocess
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from fastapi import APIRouter
 
@@ -18,6 +19,22 @@ router = APIRouter(prefix="/api/system", tags=["system"])
 # 缓存上一次 cpu_percent 的非阻塞采样基线
 _last_cpu_sample_t = 0.0
 
+# /api/system/info 结果缓存。psutil 采样(尤其 process_iter 扫 /proc)在 Jetson 上
+# 是明显开销，多个浏览器标签或快速刷新会重复触发。缓存 TTL 内直接复用上次结果。
+_INFO_CACHE_TTL = 2.0
+_info_cache: Optional[Dict[str, Any]] = None
+_info_cache_t = 0.0
+_info_cache_top_n = 0
+_info_lock: Optional[asyncio.Lock] = None
+
+
+def _get_info_lock() -> asyncio.Lock:
+    """懒创建锁，避免在没有 event loop 的导入期构造。"""
+    global _info_lock
+    if _info_lock is None:
+        _info_lock = asyncio.Lock()
+    return _info_lock
+
 
 def _bytes_to_gib(n: int) -> float:
     return round(n / (1024 ** 3), 2)
@@ -31,16 +48,45 @@ def _bytes_to_mib(n: int) -> float:
 async def get_system_info(top_n: int = 5) -> Dict[str, Any]:
     """获取系统资源使用情况
 
+    psutil 全是同步阻塞调用，直接写在 async 里会卡住 console 的 event loop
+    （连带卡住相机 MJPEG 转发和所有代理请求），所以放到线程池执行，并加短 TTL 缓存。
+
+    Args:
+        top_n: 返回的进程数；传 0 跳过 process_iter（Jetson 上扫 /proc 最贵的一步）
+
     返回:
         cpu: 核心数 / 整体百分比 / 每核百分比 / 1-5-15 负载
         memory: 总量 / 已用 / 可用 / 百分比 / swap
         disk: 根分区 总量 / 已用 / 可用 / 百分比
-        top_processes: 按 CPU 占用排序的前 N 个进程
+        top_processes: 按 CPU 占用排序的前 N 个进程（top_n=0 时为空）
         boot_time: 启动时间 + uptime 秒数
     """
     if not _HAS_PSUTIL:
         return {"error": "psutil not installed"}
 
+    global _info_cache, _info_cache_t, _info_cache_top_n
+
+    async with _get_info_lock():
+        now = time.time()
+        # 缓存命中条件：未过期，且缓存里的进程数不少于本次请求需要的
+        if (_info_cache is not None
+                and now - _info_cache_t < _INFO_CACHE_TTL
+                and _info_cache_top_n >= top_n):
+            cached = dict(_info_cache)
+            cached["top_processes"] = cached.get("top_processes", [])[:top_n]
+            cached["cached"] = True
+            return cached
+
+        loop = asyncio.get_event_loop()
+        info = await loop.run_in_executor(None, _collect_system_info, top_n)
+        _info_cache = info
+        _info_cache_t = now
+        _info_cache_top_n = top_n
+        return info
+
+
+def _collect_system_info(top_n: int) -> Dict[str, Any]:
+    """同步采集系统信息（在线程池中运行）"""
     global _last_cpu_sample_t
     now = time.time()
     # 第一次调用 cpu_percent(interval=None) 会返回 0.0,所以首次同步采样 0.1s
@@ -66,27 +112,31 @@ async def get_system_info(top_n: int = 5) -> Dict[str, Any]:
     # 磁盘(根分区)
     du = psutil.disk_usage("/")
 
-    # Top 进程(按 cpu_percent 排序)
-    procs: List[Dict[str, Any]] = []
-    for p in psutil.process_iter(["pid", "name", "cpu_percent", "memory_percent", "cmdline"]):
-        try:
-            info = p.info
-            cmdline = info.get("cmdline") or []
-            # 优先用命令行第一段(更具识别性),否则退回进程名
-            display = " ".join(cmdline[:3]) if cmdline else (info.get("name") or "?")
-            if len(display) > 80:
-                display = display[:77] + "..."
-            procs.append({
-                "pid": info["pid"],
-                "name": display,
-                "cpu_percent": round(info.get("cpu_percent") or 0.0, 1),
-                "memory_percent": round(info.get("memory_percent") or 0.0, 1),
-            })
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            continue
+    # Top 进程(按 cpu_percent 排序)。top_n<=0 时整段跳过：
+    # process_iter 要为每个进程读 /proc/<pid>/{stat,cmdline,statm}，
+    # 在 Jetson 上是本接口最贵的部分，遥操采集时并不需要。
+    top_processes: List[Dict[str, Any]] = []
+    if top_n > 0:
+        procs: List[Dict[str, Any]] = []
+        for p in psutil.process_iter(["pid", "name", "cpu_percent", "memory_percent", "cmdline"]):
+            try:
+                info = p.info
+                cmdline = info.get("cmdline") or []
+                # 优先用命令行第一段(更具识别性),否则退回进程名
+                display = " ".join(cmdline[:3]) if cmdline else (info.get("name") or "?")
+                if len(display) > 80:
+                    display = display[:77] + "..."
+                procs.append({
+                    "pid": info["pid"],
+                    "name": display,
+                    "cpu_percent": round(info.get("cpu_percent") or 0.0, 1),
+                    "memory_percent": round(info.get("memory_percent") or 0.0, 1),
+                })
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
 
-    procs.sort(key=lambda x: x["cpu_percent"], reverse=True)
-    top_processes = procs[:max(1, min(top_n, 20))]
+        procs.sort(key=lambda x: x["cpu_percent"], reverse=True)
+        top_processes = procs[:min(top_n, 20)]
 
     boot_ts = psutil.boot_time()
     uptime_seconds = int(now - boot_ts)
@@ -117,12 +167,16 @@ async def get_system_info(top_n: int = 5) -> Dict[str, Any]:
         },
         "uptime_seconds": uptime_seconds,
         "top_processes": top_processes,
+        "cached": False,
     }
 
 
 @router.get("/vr/status")
 async def get_vr_status() -> Dict[str, Any]:
     """获取 VR 连接状态（Quest 设备 + adb reverse 端口转发）
+
+    adb 是阻塞子进程调用（最长 5s 超时），必须放到线程池，
+    否则一次 adb 卡顿会冻结整个 console 的 event loop。
 
     返回:
         device_connected: Quest 设备是否连接
@@ -131,6 +185,12 @@ async def get_vr_status() -> Dict[str, Any]:
         adb_available: adb 命令是否可用
         error: 错误信息（如果有）
     """
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _probe_vr_status)
+
+
+def _probe_vr_status() -> Dict[str, Any]:
+    """同步探测 VR 状态（在线程池中运行）"""
     result = {
         "device_connected": False,
         "device_serial": None,
@@ -238,12 +298,16 @@ async def connect_vr() -> Dict[str, Any]:
             result["message"] = "Please connect Quest via USB and enable USB debugging"
             return result
 
-        # 执行端口转发
-        reverse_cmd = subprocess.run(
-            ["adb", "reverse", "tcp:5200", "tcp:5201"],
-            capture_output=True,
-            text=True,
-            timeout=5
+        # 执行端口转发（阻塞子进程 -> 线程池）
+        loop = asyncio.get_event_loop()
+        reverse_cmd = await loop.run_in_executor(
+            None,
+            lambda: subprocess.run(
+                ["adb", "reverse", "tcp:5200", "tcp:5201"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            ),
         )
 
         if reverse_cmd.returncode == 0:
@@ -281,12 +345,16 @@ async def disconnect_vr() -> Dict[str, Any]:
     }
 
     try:
-        # 移除端口转发
-        reverse_cmd = subprocess.run(
-            ["adb", "reverse", "--remove", "tcp:5200"],
-            capture_output=True,
-            text=True,
-            timeout=5
+        # 移除端口转发（阻塞子进程 -> 线程池）
+        loop = asyncio.get_event_loop()
+        reverse_cmd = await loop.run_in_executor(
+            None,
+            lambda: subprocess.run(
+                ["adb", "reverse", "--remove", "tcp:5200"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            ),
         )
 
         if reverse_cmd.returncode == 0:

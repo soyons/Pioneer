@@ -7,6 +7,7 @@ class UrdfViewer {
         this.camera = null;
         this.renderer = null;
         this.controls = null;
+        this.renderPending = false;
         this.models = new Map();
         this.joints = new Map();
         this.jointValues = new Map();
@@ -56,6 +57,7 @@ class UrdfViewer {
                 item.axisHelper.visible = this.showJointAxes;
                 item.axisArrow.visible = this.showJointAxes;
             });
+            this.requestRender();
         });
     }
 
@@ -88,12 +90,31 @@ class UrdfViewer {
 
         if (THREE.OrbitControls) {
             this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
-            this.controls.enableDamping = true;
+            // damping 需要每帧 update 才有惯性效果;按需渲染下关掉,
+            // 换来"不动就不画",在 Jetson 的集成 GPU 上省掉持续的 60fps 开销。
+            this.controls.enableDamping = false;
             this.controls.target.set(0, 0, 0.25);
+            this.controls.addEventListener('change', () => this.requestRender());
         }
 
         this.resizeObserver = new ResizeObserver(() => this.resize());
         this.resizeObserver.observe(host);
+    }
+
+    /**
+     * 请求一次渲染。多次调用在同一帧内合并为一次。
+     * 替代原来的 requestAnimationFrame 死循环:只有关节更新、
+     * 相机交互和尺寸变化才需要重画。
+     */
+    requestRender() {
+        if (this.destroyed || !this.renderer || this.renderPending) return;
+        this.renderPending = true;
+        this.animationFrame = requestAnimationFrame(() => {
+            this.renderPending = false;
+            this.animationFrame = null;
+            if (this.destroyed || !this.renderer) return;
+            this.renderer.render(this.scene, this.camera);
+        });
     }
 
     resize() {
@@ -105,6 +126,7 @@ class UrdfViewer {
         this.camera.aspect = width / height;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(width, height);
+        this.requestRender();
     }
 
     static rpyQuaternion(rpy) {
@@ -267,6 +289,8 @@ class UrdfViewer {
             return false;
         }
 
+        this.requestRender();
+
         const connected = activeArm ? Boolean(connectedMap[activeArm]) : false;
         const time = state.timestamp
             ? new Date(state.timestamp * 1000).toLocaleTimeString()
@@ -313,13 +337,15 @@ class UrdfViewer {
 
     resetView() {
         this.fitCamera();
+        this.requestRender();
     }
 
+    /**
+     * 保留 animate() 名字做入口,但只画一帧。
+     * 后续重画由 requestRender() 在状态/交互/resize 时触发。
+     */
     animate() {
-        if (!this.renderer || this.destroyed) return;
-        this.animationFrame = requestAnimationFrame(() => this.animate());
-        if (this.controls) this.controls.update();
-        this.renderer.render(this.scene, this.camera);
+        this.requestRender();
     }
 
     disposeMaterial(material) {

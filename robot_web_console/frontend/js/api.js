@@ -7,6 +7,18 @@
 const API_BASE_URL = window.location.origin;
 const WS_PREFIX = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 
+// 轮询闸门:标签页不可见时跳过网络请求。
+// 在 Jetson 上后端是瓶颈,后台标签继续轮询会成倍放大 CPU 占用。
+// 定时器本身保留(几乎零成本),回到前台后立刻恢复数据。
+window.shouldPoll = () => !document.hidden;
+
+// 注册"回到前台"回调,便于各页面立即补一次刷新而不必等下个周期。
+window.onPollResume = (callback) => {
+    const handler = () => { if (!document.hidden) callback(); };
+    document.addEventListener('visibilitychange', handler);
+    return () => document.removeEventListener('visibilitychange', handler);
+};
+
 class RobotAPI {
     constructor() {
         this.baseUrl = API_BASE_URL;
@@ -73,47 +85,62 @@ class RobotAPI {
     }
 
     // WebSocket connection
-    connectWebSocket(channel, onMessage, onError = null) {
+    connectWebSocket(channel, onMessage, onError = null, handlers = {}) {
         const url = `${this.wsUrl}/${channel}`;
-
-        if (this.websockets[channel]) {
-            console.warn(`WebSocket ${channel} already connected`);
-            return this.websockets[channel];
+        const existing = this.websockets[channel];
+        if (existing) {
+            existing.intentionalClose = true;
+            if (existing.reconnectTimer) clearTimeout(existing.reconnectTimer);
+            existing.socket.close();
         }
 
-        const ws = new WebSocket(url);
+        const entry = {
+            socket: null,
+            intentionalClose: false,
+            reconnectTimer: null,
+            onMessage,
+            onError,
+            handlers,
+        };
+        const connect = () => {
+            if (entry.intentionalClose) return;
+            const ws = new WebSocket(url);
+            entry.socket = ws;
 
-        ws.onopen = () => {
-            console.log(`WebSocket connected: ${channel}`);
+            ws.onopen = () => {
+                console.log(`WebSocket connected: ${channel}`);
+                handlers.onOpen?.();
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    entry.onMessage(data);
+                } catch (error) {
+                    console.error(`WebSocket parse error (${channel}):`, error);
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error(`WebSocket error (${channel}):`, error);
+                entry.onError?.(error);
+            };
+
+            ws.onclose = () => {
+                console.log(`WebSocket closed: ${channel}`);
+                handlers.onClose?.();
+                if (entry.intentionalClose || this.websockets[channel] !== entry) return;
+                entry.reconnectTimer = setTimeout(() => {
+                    entry.reconnectTimer = null;
+                    console.log(`Reconnecting WebSocket: ${channel}`);
+                    connect();
+                }, 3000);
+            };
         };
 
-        ws.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                onMessage(data);
-            } catch (error) {
-                console.error(`WebSocket parse error (${channel}):`, error);
-            }
-        };
-
-        ws.onerror = (error) => {
-            console.error(`WebSocket error (${channel}):`, error);
-            if (onError) onError(error);
-        };
-
-        ws.onclose = () => {
-            console.log(`WebSocket closed: ${channel}`);
-            delete this.websockets[channel];
-
-            // Auto-reconnect after 3 seconds
-            setTimeout(() => {
-                console.log(`Reconnecting WebSocket: ${channel}`);
-                this.connectWebSocket(channel, onMessage, onError);
-            }, 3000);
-        };
-
-        this.websockets[channel] = ws;
-        return ws;
+        this.websockets[channel] = entry;
+        connect();
+        return entry;
     }
 
     // URDF/model API
@@ -127,10 +154,12 @@ class RobotAPI {
 
     // Close WebSocket
     closeWebSocket(channel) {
-        if (this.websockets[channel]) {
-            this.websockets[channel].close();
-            delete this.websockets[channel];
-        }
+        const entry = this.websockets[channel];
+        if (!entry) return;
+        entry.intentionalClose = true;
+        if (entry.reconnectTimer) clearTimeout(entry.reconnectTimer);
+        entry.socket?.close();
+        delete this.websockets[channel];
     }
 
     // Status API

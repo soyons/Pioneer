@@ -29,8 +29,8 @@ class RobotApp {
         // Setup emergency stop
         this.setupEmergencyStop();
 
-        // Start connection check
-        this.startConnectionMonitor();
+        // 后台标签页暂停轮询(Jetson 上多开标签会成倍放大后端负载)
+        this.setupVisibilityHandling();
 
         // Load initial page
         this.loadPage('status');
@@ -82,26 +82,22 @@ class RobotApp {
         });
     }
 
-    async startConnectionMonitor() {
-        const updateConnectionStatus = async () => {
-            try {
-                const health = await api.getHealth();
-                this.setConnectionStatus(true);
-            } catch (error) {
-                this.setConnectionStatus(false);
-            }
-        };
-
-        // Check immediately
-        await updateConnectionStatus();
-
-        // Check every 5 seconds
-        setInterval(updateConnectionStatus, 5000);
+    setConnectionStatus(connected) {
+        // 三灯状态栏由 services_monitor.js 接管,这里只保留内部状态标记
+        this.isConnected = connected;
     }
 
-    setConnectionStatus(connected) {
-        // 三灯状态栏由 services_monitor.js 接管,这里只更新内部状态标记
-        this.isConnected = connected;
+    setupVisibilityHandling() {
+        // 回到前台时立即补一次当前页的刷新,不必等下一个轮询周期
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) return;
+            if (this.currentPage === 'status') {
+                this.refreshStatusOnce();
+                this.refreshSystemOnce();
+            } else if (this.currentPage === 'jog') {
+                this.refreshJogStatus(this.jogPageGeneration);
+            }
+        });
     }
 
     async loadPage(pageName) {
@@ -110,6 +106,7 @@ class RobotApp {
         if (this.currentPage === 'teleop' && typeof TeleopPage !== 'undefined') TeleopPage.onLeave?.();
         if (this.currentPage === 'coachdata' && typeof CoachDataPage !== 'undefined') CoachDataPage.onLeave?.();
         if (this.currentPage === 'depot' && typeof DepotPage !== 'undefined') DepotPage.onLeave?.();
+        if (this.currentPage === 'diagnostics' && diagnosticsPage) diagnosticsPage.onLeave?.();
         if (this.currentPage === 'jog' && pageName !== 'jog') this.disposeJogPage();
 
         // 离开 Status 页时清掉刷新定时器,避免后台空跑
@@ -184,21 +181,26 @@ class RobotApp {
         this.startSystemUpdates();
     }
 
+    async refreshSystemOnce() {
+        try {
+            const info = await api.getSystemInfo(5);
+            this.updateSystemDisplay(info);
+        } catch (error) {
+            console.error('Failed to update system info:', error);
+            const el = document.getElementById('systemInfo');
+            if (el) el.innerHTML = `<p class="text-danger">系统信息获取失败: ${error.message}</p>`;
+        }
+    }
+
     async startSystemUpdates() {
         if (this.systemUpdateInterval) clearInterval(this.systemUpdateInterval);
-        const update = async () => {
-            try {
-                const info = await api.getSystemInfo(5);
-                this.updateSystemDisplay(info);
-            } catch (error) {
-                console.error('Failed to update system info:', error);
-                const el = document.getElementById('systemInfo');
-                if (el) el.innerHTML = `<p class="text-danger">系统信息获取失败: ${error.message}</p>`;
-            }
-        };
-        await update();
-        // 系统资源 2 秒刷新一次,与机器人状态(1Hz)解耦
-        this.systemUpdateInterval = setInterval(update, 2000);
+        await this.refreshSystemOnce();
+        // 系统资源 5 秒刷新一次:这个接口要采样 psutil 并扫 /proc 拿 top 进程,
+        // 是 console 后端最贵的一个接口,2 秒一次在 Jetson 上明显吃 CPU。
+        this.systemUpdateInterval = setInterval(() => {
+            if (!window.shouldPoll()) return;
+            this.refreshSystemOnce();
+        }, 5000);
     }
 
     updateSystemDisplay(info) {
@@ -292,18 +294,23 @@ class RobotApp {
         if (tsEl) tsEl.textContent = 'Updated: ' + new Date(info.timestamp * 1000).toLocaleTimeString();
     }
 
+    async refreshStatusOnce() {
+        try {
+            const status = await api.getStatus();
+            this.updateStatusDisplay(status);
+        } catch (error) {
+            console.error('Failed to update status:', error);
+        }
+    }
+
     async startStatusUpdates() {
         if (this.stateUpdateInterval) clearInterval(this.stateUpdateInterval);
-        const updateStatus = async () => {
-            try {
-                const status = await api.getStatus();
-                this.updateStatusDisplay(status);
-            } catch (error) {
-                console.error('Failed to update status:', error);
-            }
-        };
-        await updateStatus();
-        this.stateUpdateInterval = setInterval(updateStatus, 1000);
+        await this.refreshStatusOnce();
+        // 概览页 2 秒足够:controller 侧状态本身由 10Hz 缓存维护,更快只是多跑代理
+        this.stateUpdateInterval = setInterval(() => {
+            if (!window.shouldPoll()) return;
+            this.refreshStatusOnce();
+        }, 2000);
     }
 
     updateStatusDisplay(status) {
@@ -533,7 +540,12 @@ class RobotApp {
             this.refreshDirectionCalibrationStatus(),
         ]);
         if (this.currentPage === 'jog' && generation === this.jogPageGeneration) {
-            this.jogStateInterval = setInterval(() => this.refreshJogStatus(generation), 200);
+            // 500ms(2Hz):够看清 jog 后的落点和 URDF 姿态。
+            // 原来的 200ms 会让代理 + controller 状态查询和 3D 渲染在 Jetson 上互相抢 CPU。
+            this.jogStateInterval = setInterval(() => {
+                if (!window.shouldPoll()) return;
+                this.refreshJogStatus(generation);
+            }, 500);
         }
     }
 

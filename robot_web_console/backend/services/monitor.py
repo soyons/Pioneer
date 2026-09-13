@@ -24,7 +24,7 @@ class ServiceStatus:
 class ServiceMonitor:
     """服务状态监控器 - 定期探测各服务健康状态"""
 
-    def __init__(self, services: Dict[str, ServiceConfig], check_interval: float = 2.0):
+    def __init__(self, services: Dict[str, ServiceConfig], check_interval: float = 5.0):
         """
         Args:
             services: 服务配置字典 {service_key: ServiceConfig}
@@ -37,6 +37,17 @@ class ServiceMonitor:
         }
         self._task: Optional[asyncio.Task] = None
         self._running = False
+        # 复用同一个 client：三个服务的健康探测是固定周期的短请求，
+        # 每次新建 client 会重复握手并丢弃连接池。
+        self._client: Optional[httpx.AsyncClient] = None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        if self._client is None:
+            self._client = httpx.AsyncClient(
+                timeout=2.0,
+                limits=httpx.Limits(max_keepalive_connections=4, max_connections=8),
+            )
+        return self._client
 
     async def check_service(self, key: str, config: ServiceConfig) -> None:
         """检查单个服务健康状态"""
@@ -45,14 +56,13 @@ class ServiceMonitor:
 
         start = asyncio.get_event_loop().time()
         try:
-            async with httpx.AsyncClient(timeout=2.0) as client:
-                response = await client.get(url)
-                elapsed_ms = (asyncio.get_event_loop().time() - start) * 1000
+            response = await self._get_client().get(url)
+            elapsed_ms = (asyncio.get_event_loop().time() - start) * 1000
 
-                status.online = response.status_code == 200
-                status.response_time_ms = elapsed_ms
-                status.error = None if status.online else "HTTP {}".format(response.status_code)
-                status.last_check = datetime.now()
+            status.online = response.status_code == 200
+            status.response_time_ms = elapsed_ms
+            status.error = None if status.online else "HTTP {}".format(response.status_code)
+            status.last_check = datetime.now()
 
         except httpx.TimeoutException:
             status.online = False
@@ -108,6 +118,9 @@ class ServiceMonitor:
                 await self._task
             except asyncio.CancelledError:
                 pass
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
 
     def get_status(self, key: str) -> Optional[ServiceStatus]:
         """获取单个服务状态"""

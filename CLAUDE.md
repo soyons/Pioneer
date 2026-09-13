@@ -263,10 +263,10 @@ piper/
 
 ## Coordinate System
 
-- Unity (左手系): X=right, Y=up, Z=forward
+- OpenXR (右手系): X=right, Y=up, Z=back（前方为 -Z）
 - ROS (右手系): X=forward, Y=left, Z=up
-- 转换: ROS_X=Unity_Z, ROS_Y=-Unity_X, ROS_Z=Unity_Y
-- 坐标转换在bridge内完成，在计算delta之后进行
+- 转换: ROS_X=-OpenXR_Z, ROS_Y=-OpenXR_X, ROS_Z=OpenXR_Y
+- 坐标转换在 Coach 内计算 delta 之后进行；Dual Scorpion alignment 再将 ROS delta 旋转到 `base_link`
 
 ## HTTP API (teleop)
 

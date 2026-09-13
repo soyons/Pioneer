@@ -117,7 +117,10 @@ class CalibrationPage {
     startPositionPolling() {
         this.stopPositionPolling();
 
+        // 200ms:校准时人在手动掰关节,需要跟手的反馈。
+        // 只在校准流程中运行,不与遥操采集同时发生。
         this.pollInterval = setInterval(async () => {
+            if (!window.shouldPoll()) return;
             try {
                 const data = await api.getCurrentPositions();
                 this.currentPositions = data.positions;
@@ -125,7 +128,7 @@ class CalibrationPage {
             } catch (error) {
                 console.error('Failed to poll positions:', error);
             }
-        }, 200); // Poll every 200ms
+        }, 200);
     }
 
     stopPositionPolling() {

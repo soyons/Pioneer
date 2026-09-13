@@ -1,7 +1,8 @@
 // 相机管理页面 - 列表、状态、V4L2 控制项实时调参
 const CamerasPage = {
     refreshTimer: null,
-    refreshIntervalMs: 2000,
+    // 相机列表/状态变化很慢,5s 足够;预览画面自己是 MJPEG 流,不靠这个轮询
+    refreshIntervalMs: 5000,
 
     async render(container) {
         container.innerHTML = `
@@ -28,7 +29,10 @@ const CamerasPage = {
         document.getElementById('btnViewAll').addEventListener('click', () => this.toggleAll());
 
         await this.refresh();
-        this.refreshTimer = setInterval(() => this.refresh(true), this.refreshIntervalMs);
+        this.refreshTimer = setInterval(() => {
+            if (!window.shouldPoll()) return;
+            this.refresh(true);
+        }, this.refreshIntervalMs);
     },
 
     onLeave() {

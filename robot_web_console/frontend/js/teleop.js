@@ -1,7 +1,7 @@
 // Coach 控制页面 - 状态、配置热加载、参考点重置、VR连接管理
 const TeleopPage = {
     refreshTimer: null,
-    refreshIntervalMs: 2000,
+    refreshIntervalMs: 3000,
     vrDataTimer: null,
     vrDataRefreshMs: 100,  // VR 数据高频刷新 10Hz
     vrStatusTimer: null,
@@ -92,7 +92,10 @@ const TeleopPage = {
         document.getElementById('btnVRToggle').addEventListener('click', () => this.handleVRToggle());
 
         await Promise.all([this.refreshStatus(), this.loadConfig()]);
-        this.refreshTimer = setInterval(() => this.refreshStatus(true), this.refreshIntervalMs);
+        this.refreshTimer = setInterval(() => {
+            if (!window.shouldPoll()) return;
+            this.refreshStatus(true);
+        }, this.refreshIntervalMs);
         // VR 状态轮询已临时禁用（容器内无 adb 访问）
         // this.vrStatusTimer = setInterval(() => this.updateVRStatus(), 3000);
     },

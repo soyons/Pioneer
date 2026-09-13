@@ -1,7 +1,9 @@
-// 服务状态监控 - 每 2 秒轮询 /api/services/status,更新三灯
+// 服务状态监控 - 定期轮询 /api/services/status,更新三灯
 // 三灯可点击,点击后在主内容区加载对应服务的详情页面
 const ServicesMonitor = {
-    intervalMs: 2000,
+    // 5s 与后端 ServiceMonitor 的探测周期对齐:
+    // 后端本来就只每 5s 刷新一次缓存,前端问得更快只是白跑代理。
+    intervalMs: 5000,
     timer: null,
 
     async pollOnce() {
@@ -104,7 +106,12 @@ const ServicesMonitor = {
 
     start() {
         this.pollOnce();
-        this.timer = setInterval(() => this.pollOnce(), this.intervalMs);
+        this.timer = setInterval(() => {
+            if (!window.shouldPoll()) return;
+            this.pollOnce();
+        }, this.intervalMs);
+        // 回到前台立刻刷新一次三灯,不用等下个周期
+        window.onPollResume(() => this.pollOnce());
         this.bindClickHandlers();
     },
 

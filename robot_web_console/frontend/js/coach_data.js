@@ -1,9 +1,15 @@
 // Coach Data 采集页 - 采集员/任务选择、相机实时画面、VR/Web 双控录制、成功/失败标注、episode 列表
 const CoachDataPage = {
     statusTimer: null,
+    // 录制中 1s(要看计时和 episode 状态),空闲时 3s
     statusIntervalMs: 1000,
+    statusIdleIntervalMs: 3000,
     vrDataTimer: null,
-    vrDataRefreshMs: 100,
+    // Quest 姿态数字面板 5Hz 已足够肉眼判断追踪是否正常;
+    // 原来的 10Hz 会在采集期间持续占用 console 代理和 coach 的 Flask 线程。
+    vrDataRefreshMs: 200,
+    // VR 数据面板是否可见(不可见时不轮询)
+    vrPanelVisible: true,
     pageGeneration: 0,
     statusInFlightGeneration: null,
     vrDataInFlightGeneration: null,
@@ -69,8 +75,10 @@ const CoachDataPage = {
             <div class="card" id="coachVrPanel">
                 <div class="card-title coach-vr-title">
                     <span>🎮 Quest 手柄实时数据</span>
-                    <span class="coach-vr-rate">10 Hz</span>
+                    <span class="coach-vr-rate" id="coachVrRate">5 Hz</span>
+                    <button class="btn btn-secondary btn-sm" id="btnToggleVrPanel">暂停面板</button>
                 </div>
+                <div id="coachVrBody">
                 <div id="coachVrStreamState" class="coach-vr-stream waiting" role="status" aria-live="polite">
                     <span class="coach-vr-stream-dot"></span>
                     <span id="coachVrStreamText">正在等待 Quest 数据...</span>
@@ -99,6 +107,7 @@ const CoachDataPage = {
                     ${this.controllerCardMarkup('left', '左手柄', 'X', 'Y')}
                     ${this.controllerCardMarkup('right', '右手柄', 'A', 'B')}
                 </div>
+                </div>
             </div>
 
             <div class="card">
@@ -122,6 +131,7 @@ const CoachDataPage = {
         document.getElementById('btnStopSuccess').addEventListener('click', () => this.stopRecording('success'));
         document.getElementById('btnStopFailure').addEventListener('click', () => this.stopRecording('failure'));
         document.getElementById('btnToggleCams').addEventListener('click', () => this.toggleCameras());
+        document.getElementById('btnToggleVrPanel').addEventListener('click', () => this.toggleVrPanel());
 
         await this.refreshAll(generation);
         if (!this.isCurrent(generation)) return;
@@ -478,11 +488,13 @@ const CoachDataPage = {
     scheduleStatusPoll(generation) {
         if (!this.isCurrent(generation)) return;
         if (this.statusTimer) clearTimeout(this.statusTimer);
+        // 录制中才需要 1Hz 看计时;空闲时 3s 一次即可
+        const delay = this.recording ? this.statusIntervalMs : this.statusIdleIntervalMs;
         this.statusTimer = setTimeout(async () => {
             this.statusTimer = null;
-            await this.pollStatus(generation);
+            if (window.shouldPoll()) await this.pollStatus(generation);
             this.scheduleStatusPoll(generation);
-        }, this.statusIntervalMs);
+        }, delay);
     },
 
     async refreshVRData(generation = this.pageGeneration) {
@@ -520,12 +532,31 @@ const CoachDataPage = {
         }
     },
 
+    /**
+     * 暂停/恢复 Quest 数据面板。
+     * 采集时确认过追踪正常后可以暂停,省掉整条最高频的轮询链路
+     * (console 代理 -> coach Flask -> 帧序列化)。
+     */
+    toggleVrPanel() {
+        this.vrPanelVisible = !this.vrPanelVisible;
+        const body = document.getElementById('coachVrBody');
+        const btn = document.getElementById('btnToggleVrPanel');
+        const rate = document.getElementById('coachVrRate');
+        if (body) body.style.display = this.vrPanelVisible ? '' : 'none';
+        if (btn) btn.textContent = this.vrPanelVisible ? '暂停面板' : '恢复面板';
+        if (rate) rate.textContent = this.vrPanelVisible ? '5 Hz' : '已暂停';
+        if (this.vrPanelVisible) this.refreshVRData(this.pageGeneration);
+    },
+
     scheduleVRDataPoll(generation) {
         if (!this.isCurrent(generation)) return;
         if (this.vrDataTimer) clearTimeout(this.vrDataTimer);
         this.vrDataTimer = setTimeout(async () => {
             this.vrDataTimer = null;
-            await this.refreshVRData(generation);
+            // 面板折叠或标签页在后台时不请求:采集时这是最高频的一路轮询
+            if (window.shouldPoll() && this.vrPanelVisible) {
+                await this.refreshVRData(generation);
+            }
             this.scheduleVRDataPoll(generation);
         }, this.vrDataRefreshMs);
     },

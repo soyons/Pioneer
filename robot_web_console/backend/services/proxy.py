@@ -7,6 +7,30 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 logger = logging.getLogger(__name__)
 
+# 共享 AsyncClient：轮询类请求(jog 状态/VR 数据/状态灯)每秒可达十几次，
+# 每次新建 client 都要重做 TCP 握手并丢弃连接池，在 Jetson 上是可观的
+# CPU 和延迟开销。这里保持单实例长连接复用。
+_client = None
+
+
+def get_client() -> httpx.AsyncClient:
+    """获取共享代理客户端（懒初始化，keep-alive 连接池）"""
+    global _client
+    if _client is None:
+        _client = httpx.AsyncClient(
+            timeout=30.0,
+            limits=httpx.Limits(max_keepalive_connections=16, max_connections=32),
+        )
+    return _client
+
+
+async def close_client() -> None:
+    """关闭共享客户端（应用 shutdown 时调用）"""
+    global _client
+    if _client is not None:
+        await _client.aclose()
+        _client = None
+
 
 def _is_status_endpoint(path: str) -> bool:
     """判断是否为状态/健康检查端点"""
@@ -66,18 +90,18 @@ async def proxy_request(
         if is_stream:
             return await _proxy_stream(request.method, target_full_url, headers, body)
 
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.request(
-                method=request.method,
-                url=target_full_url,
-                headers=headers,
-                content=body,
-            )
-            return Response(
-                content=response.content,
-                status_code=response.status_code,
-                headers=dict(response.headers),
-            )
+        response = await get_client().request(
+            method=request.method,
+            url=target_full_url,
+            headers=headers,
+            content=body,
+            timeout=timeout,
+        )
+        return Response(
+            content=response.content,
+            status_code=response.status_code,
+            headers=dict(response.headers),
+        )
 
     except httpx.TimeoutException:
         logger.warning(f"Proxy timeout: {request.method} {target_full_url}")

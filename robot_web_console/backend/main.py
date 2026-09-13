@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings, load_settings
-from .routes import proxy, services, system, datasets
+from .routes import proxy, services, system, datasets, telemetry
 from .services.monitor import ServiceMonitor
 
 
@@ -30,8 +30,9 @@ async def startup_event():
     logger = logging.getLogger(__name__)
     logger.info("Starting robot_web_console in {} mode".format(settings.mode))
 
-    # 初始化服务监控
-    monitor = ServiceMonitor(settings.services, check_interval=2.0)
+    # 初始化服务监控。5s 足够点亮三灯，2s 会让 controller 的
+    # /api/status 被反复唤醒，在 Jetson 上白占 CPU。
+    monitor = ServiceMonitor(settings.services, check_interval=settings.monitor.check_interval)
     await monitor.start()
     app.state.monitor = monitor
 
@@ -46,6 +47,8 @@ async def shutdown_event():
     logger.info("Shutting down robot_web_console")
     if hasattr(app.state, 'monitor'):
         await app.state.monitor.stop()
+    from .services.proxy import close_client
+    await close_client()
 
 
 # CORS 中间件
@@ -64,6 +67,7 @@ app.include_router(datasets.router)
 app.include_router(proxy.camera_router)
 app.include_router(proxy.teleop_router)
 app.include_router(proxy.robot_router)
+app.include_router(telemetry.router)
 
 
 @app.get("/api/health")

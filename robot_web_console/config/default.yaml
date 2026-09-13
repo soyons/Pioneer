@@ -45,6 +45,11 @@ services:
       env:
         PYTHONPATH: "/workspace/robot_controller/src"
 
+# 服务健康探测(三灯)间隔。Jetson 上不要调太低:
+# 每次探测都会打到 camera/coach/controller 的状态接口。
+monitor:
+  check_interval: 5.0
+
 # 日志配置
 logging:
   level: "INFO"
