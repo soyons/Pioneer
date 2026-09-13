@@ -13,6 +13,8 @@ const DepotPage = {
     _seekRAF: null,
     expandedKeys: new Set(),  // 放大显示(占满整行)的图 key
     playbackRate: 1,          // 视频播放倍速
+    _conversionTimer: null,
+    _conversionLastRunning: false,
 
     // 几何常量(所有图共享同一 x 轴)
     W: 760, H: 132, padL: 46, padR: 10, padT: 10, padB: 20,
@@ -45,6 +47,24 @@ const DepotPage = {
                     </div>
                 </div>
                 <div id="datasetMeta" class="depot-meta" style="margin-top:10px; font-size:0.85rem; color:var(--text-secondary);"></div>
+            </div>
+
+            <div class="card depot-compact">
+                <div class="card-title"><span>🔄 ROS → LeRobot 批量转换</span></div>
+                <div style="display:grid;grid-template-columns:2fr 1fr 100px auto;gap:8px;align-items:end;">
+                    <label style="font-size:0.8rem;color:var(--text-secondary)">录制目录
+                        <input id="conversionRoot" class="form-input" value="/workspace/coach/recordings">
+                    </label>
+                    <label style="font-size:0.8rem;color:var(--text-secondary)">repo_id
+                        <input id="conversionRepo" class="form-input" placeholder="user/pickplace">
+                    </label>
+                    <label style="font-size:0.8rem;color:var(--text-secondary)">FPS
+                        <input id="conversionFps" class="form-input" type="number" min="1" max="120" value="30">
+                    </label>
+                    <button class="btn btn-primary" id="btnConversionStart">开始转换</button>
+                </div>
+                <div id="conversionStatus" style="margin-top:8px;font-size:0.8rem;color:var(--text-secondary)">未运行</div>
+                <pre id="conversionLog" style="max-height:100px;overflow:auto;margin:6px 0 0;font-size:0.72rem;white-space:pre-wrap"></pre>
             </div>
 
             <!-- 相机：上方横排 -->
@@ -90,8 +110,10 @@ const DepotPage = {
         document.getElementById('episodeSelect').addEventListener('change', (e) => this.selectEpisode(parseInt(e.target.value, 10)));
         document.getElementById('btnDepotPlay').addEventListener('click', () => this.toggleVideos());
         document.getElementById('depotSpeed').addEventListener('change', (e) => this.setSpeed(parseFloat(e.target.value)));
+        document.getElementById('btnConversionStart').addEventListener('click', () => this.startConversion());
 
         await this.loadDatasets();
+        await this.pollConversion();
     },
 
     setSpeed(rate) {
@@ -101,7 +123,58 @@ const DepotPage = {
 
     onLeave() {
         this.stopPlaybackSync();
+        if (this._conversionTimer) {
+            clearTimeout(this._conversionTimer);
+            this._conversionTimer = null;
+        }
         document.querySelectorAll('#depotVideos video').forEach(v => { v.pause(); v.removeAttribute('src'); v.load(); });
+    },
+
+    async startConversion() {
+        const status = document.getElementById('conversionStatus');
+        const repoId = document.getElementById('conversionRepo')?.value.trim();
+        if (!repoId) {
+            this.app.showNotification('请输入 repo_id，例如 user/pickplace', 'warning');
+            return;
+        }
+        const button = document.getElementById('btnConversionStart');
+        if (button) button.disabled = true;
+        try {
+            await api.startDatasetConversion({
+                root: document.getElementById('conversionRoot')?.value.trim(),
+                repo_id: repoId,
+                fps: Number(document.getElementById('conversionFps')?.value || 30),
+            });
+            this.app.showNotification('批量转换已启动', 'success');
+            await this.pollConversion();
+        } catch (e) {
+            this.app.showNotification(`转换启动失败: ${e.message}`, 'danger');
+        } finally {
+            if (button) button.disabled = false;
+        }
+    },
+
+    async pollConversion() {
+        if (!document.getElementById('conversionStatus')) return;
+        try {
+            const state = await api.getDatasetConversionStatus();
+            const status = document.getElementById('conversionStatus');
+            const log = document.getElementById('conversionLog');
+            if (status) status.textContent = state.running
+                ? `转换中 · PID ${state.pid}`
+                : (state.returncode == null ? '未运行' : `已结束 · code ${state.returncode}`);
+            if (log) log.textContent = (state.log || []).slice(-12).join('\n');
+            if (this._conversionLastRunning && !state.running && state.returncode === 0) {
+                await this.loadDatasets();
+            }
+            this._conversionLastRunning = !!state.running;
+            if (state.running) {
+                this._conversionTimer = setTimeout(() => this.pollConversion(), 1000);
+            }
+        } catch (e) {
+            const status = document.getElementById('conversionStatus');
+            if (status) status.textContent = `状态获取失败: ${e.message}`;
+        }
     },
 
     // ---- 机械单元解析 ----

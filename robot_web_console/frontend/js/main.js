@@ -170,6 +170,15 @@ class RobotApp {
                 <div id="statusOneLine" class="status-oneline">Loading...</div>
             </div>
             <div class="card mt-4">
+                <div class="card-title">🧰 平台工具</div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+                    <button class="btn btn-secondary btn-sm" id="platformStart">启动 Camera + Coach + Controller</button>
+                    <button class="btn btn-warning btn-sm" id="platformRestart">重启后端服务</button>
+                    <span id="platformActionStatus" class="status-meta"></span>
+                </div>
+                <p class="status-meta" style="margin:8px 0 0">Web Console 本身保持运行；完整平台也可用 <code>scripts/platform.sh</code> 管理。</p>
+            </div>
+            <div class="card mt-4">
                 <div class="card-title">
                     💻 System Resources
                     <span id="systemUpdatedAt" class="status-meta" style="float:right;font-weight:normal;">-</span>
@@ -177,8 +186,28 @@ class RobotApp {
                 <div id="systemInfo" class="system-info">Loading...</div>
             </div>
         `;
+        document.getElementById('platformStart')?.addEventListener('click', () => this.platformAction('start-services'));
+        document.getElementById('platformRestart')?.addEventListener('click', () => this.platformAction('restart-services'));
         this.startStatusUpdates();
         this.startSystemUpdates();
+    }
+
+    async platformAction(action) {
+        const status = document.getElementById('platformActionStatus');
+        const buttons = ['platformStart', 'platformRestart'].map(id => document.getElementById(id)).filter(Boolean);
+        buttons.forEach(button => { button.disabled = true; });
+        if (status) status.textContent = '正在执行…';
+        try {
+            const result = await api.platformAction(action);
+            if (status) status.textContent = result.output?.split('\n').filter(Boolean).slice(-1)[0] || '完成';
+            this.showNotification(action === 'restart-services' ? '后端服务已重启' : '后端服务启动命令已执行', 'success');
+            await ServicesMonitor.pollOnce();
+        } catch (error) {
+            if (status) status.textContent = error.message;
+            this.showNotification(`平台操作失败: ${error.message}`, 'danger');
+        } finally {
+            buttons.forEach(button => { button.disabled = false; });
+        }
     }
 
     async refreshSystemOnce() {

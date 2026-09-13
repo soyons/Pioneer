@@ -462,6 +462,12 @@ class RobotAPI {
         return this.request('/check', { method: 'POST', _prefix: this.consolePrefix });
     }
 
+    async platformAction(action) {
+        return this.request(`/platform/${encodeURIComponent(action)}`, {
+            method: 'POST', _prefix: this.consolePrefix,
+        });
+    }
+
     // ============================================================
     // System Resources API (前缀 /api/system/*)
     // ============================================================
@@ -485,6 +491,18 @@ class RobotAPI {
         return this.request(
             `/${encodeURIComponent(name)}/episodes/${episodeIndex}/trajectory${q}`,
             { method: 'GET', _prefix: '/api/datasets' });
+    }
+
+    async startDatasetConversion(options) {
+        return this.request('/convert', {
+            method: 'POST',
+            body: JSON.stringify(options || {}),
+            _prefix: '/api/datasets',
+        });
+    }
+
+    async getDatasetConversionStatus() {
+        return this.request('/convert/status', { method: 'GET', _prefix: '/api/datasets' });
     }
 
     // 视频/帧是 <video>/<img> 的 src,直接拼 URL(不走 fetch)

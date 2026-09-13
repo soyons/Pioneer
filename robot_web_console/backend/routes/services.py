@@ -1,11 +1,18 @@
-"""服务管理路由 - 查询各服务状态"""
+"""服务管理路由 - 查询和管理平台服务"""
+import asyncio
+from pathlib import Path
 from typing import Dict
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from ..services.monitor import ServiceMonitor
 
 router = APIRouter(prefix="/api/services", tags=["services"])
+_platform_lock = asyncio.Lock()
+
+
+def _platform_script() -> Path:
+    return Path(__file__).resolve().parents[3] / "scripts" / "platform.sh"
 
 
 def get_monitor() -> ServiceMonitor:
@@ -54,3 +61,32 @@ async def trigger_health_check(monitor: ServiceMonitor = Depends(get_monitor)):
     """手动触发一次健康检查"""
     await monitor.check_all()
     return {"message": "Health check triggered"}
+
+
+@router.post("/platform/{action}")
+async def platform_action(action: str):
+    """一键启动/停止/重启本机 camera、coach、controller 和 console。"""
+    allowed = {"start", "stop", "restart", "status", "start-services", "stop-services", "restart-services"}
+    if action not in allowed:
+        raise HTTPException(status_code=400, detail="不支持的 platform action")
+    script = _platform_script()
+    if not script.is_file():
+        raise HTTPException(status_code=500, detail=f"platform script not found: {script}")
+
+    async with _platform_lock:
+        process = await asyncio.create_subprocess_exec(
+            str(script), action,
+            cwd=str(script.parent.parent),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        try:
+            stdout, _ = await asyncio.wait_for(process.communicate(), timeout=30)
+        except asyncio.TimeoutError:
+            process.kill()
+            await process.wait()
+            raise HTTPException(status_code=504, detail="platform operation timed out")
+        output = stdout.decode(errors="replace") if stdout else ""
+        if process.returncode != 0:
+            raise HTTPException(status_code=500, detail=output[-2000:] or "platform operation failed")
+        return {"action": action, "ok": True, "output": output[-4000:]}

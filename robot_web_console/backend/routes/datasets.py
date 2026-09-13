@@ -20,10 +20,17 @@
 """
 import json
 import logging
+import os
+import re
+import shlex
+import subprocess
+import sys
+import threading
+from collections import deque
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from ..config import get_settings
@@ -31,6 +38,12 @@ from ..config import get_settings
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/datasets", tags=["datasets"])
+
+_conversion_lock = threading.Lock()
+_conversion_process: Optional[subprocess.Popen] = None
+_conversion_log = deque(maxlen=80)
+_conversion_thread: Optional[threading.Thread] = None
+_REPO_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
 # 数值类型(可画轨迹)
 _NUMERIC_DTYPES = ("float32", "float64", "int32", "int64", "bool")
@@ -56,6 +69,110 @@ def _image_feature_keys(features: dict) -> list:
 
 def _datasets_root() -> Path:
     return Path(get_settings().datasets.root)
+
+
+def _conversion_status() -> dict:
+    with _conversion_lock:
+        process = _conversion_process
+        if process is None:
+            return {"running": False, "pid": None, "returncode": None, "log": list(_conversion_log)}
+        return {
+            "running": process.poll() is None,
+            "pid": process.pid,
+            "returncode": process.poll(),
+            "log": list(_conversion_log),
+        }
+
+
+def _collect_conversion_output(process: subprocess.Popen) -> None:
+    global _conversion_process
+    try:
+        for line in process.stdout or ():
+            with _conversion_lock:
+                _conversion_log.append(line.rstrip())
+    finally:
+        process.wait()
+        with _conversion_lock:
+            _conversion_log.append(f"conversion exited with code {process.returncode}")
+            _conversion_process = process
+
+
+@router.post("/convert")
+async def start_conversion(request: Request):
+    """Start batch ROS bag -> LeRobot conversion in a background process."""
+    global _conversion_process, _conversion_thread
+    payload = await request.json()
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="请求体必须是 JSON 对象")
+
+    repo_id = str(payload.get("repo_id", "")).strip()
+    if not _REPO_ID_RE.fullmatch(repo_id):
+        raise HTTPException(status_code=400, detail="repo_id 格式应为 owner/dataset")
+
+    root = Path(payload.get("root") or "/workspace/coach/recordings").expanduser()
+    if not root.is_dir():
+        raise HTTPException(status_code=400, detail=f"录制目录不存在: {root}")
+
+    out = Path(payload.get("out") or (_datasets_root() / repo_id.replace("/", "_"))).expanduser()
+    fps = int(payload.get("fps", 30))
+    if fps < 1 or fps > 120:
+        raise HTTPException(status_code=400, detail="fps 必须在 1 到 120 之间")
+    storage_id = str(payload.get("storage_id", "sqlite3"))
+    if storage_id not in {"sqlite3", "mcap"}:
+        raise HTTPException(status_code=400, detail="storage_id 只支持 sqlite3 或 mcap")
+
+    script = Path(__file__).resolve().parents[3] / "coach" / "scripts" / "rosbag_to_lerobot.py"
+    if not script.is_file():
+        raise HTTPException(status_code=500, detail=f"转换脚本不存在: {script}")
+
+    with _conversion_lock:
+        if _conversion_process is not None and _conversion_process.poll() is None:
+            raise HTTPException(status_code=409, detail="已有数据集转换任务在运行")
+        _conversion_log.clear()
+        command = [
+            sys.executable, str(script), "--all", "--root", str(root),
+            "--repo-id", repo_id, "--out", str(out), "--fps", str(fps),
+            "--storage-id", storage_id,
+        ]
+        if bool(payload.get("include_failed", False)):
+            command.append("--include-failed")
+        env = os.environ.copy()
+        extra_pythonpath = [str(script.parents[1] / "src"), "/workspace/piper_dataset/src"]
+        if env.get("PYTHONPATH"):
+            extra_pythonpath.append(env["PYTHONPATH"])
+        env["PYTHONPATH"] = os.pathsep.join(extra_pythonpath)
+        launch_command = command
+        ros_setup = Path("/opt/ros/humble/setup.bash")
+        if ros_setup.is_file():
+            launch_command = [
+                "bash", "-lc",
+                f"source {shlex.quote(str(ros_setup))} && exec {shlex.join(command)}",
+            ]
+        try:
+            _conversion_process = subprocess.Popen(
+                launch_command,
+                cwd=str(script.parents[1]),
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                start_new_session=True,
+            )
+        except OSError as exc:
+            _conversion_process = None
+            raise HTTPException(status_code=500, detail=f"启动转换失败: {exc}") from exc
+        _conversion_thread = threading.Thread(
+            target=_collect_conversion_output, args=(_conversion_process,),
+            name="dataset-conversion-log", daemon=True,
+        )
+        _conversion_thread.start()
+        return {"started": True, "pid": _conversion_process.pid, "repo_id": repo_id, "out": str(out)}
+
+
+@router.get("/convert/status")
+async def conversion_status():
+    return _conversion_status()
 
 
 def _safe_dataset_dir(name: str) -> Path:

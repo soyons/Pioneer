@@ -25,16 +25,34 @@ pip install -r requirements.txt
 
 ### 2. 启动(生产模式)
 
-先用 `scripts/start_all.sh` 启动三个后端服务,再启动 console:
+推荐使用统一脚本启动整个平台:
 
 ```bash
-# Terminal 1: 启动后端服务
 cd /workspace
+./scripts/platform.sh start
+```
+
+访问: http://localhost:3000。常用管理命令:
+
+```bash
+./scripts/platform.sh status
+./scripts/platform.sh restart
+./scripts/platform.sh stop
+```
+
+也可以只启动/重启 Camera、Coach、Controller，保持当前 Web Console 不断开:
+
+```bash
+./scripts/platform.sh restart-services
+```
+
+旧的分步方式仍然可用:
+
+```bash
 ./scripts/start_all.sh
 
-# Terminal 2: 启动 web console
 cd robot_web_console
-./start.sh
+PYTHONPATH=. python3 -m uvicorn backend.main:app --host 0.0.0.0 --port 3000
 ```
 
 访问: http://localhost:3000
@@ -145,6 +163,10 @@ robot_web_console/
 | Status / Jog / Presets / Calibration / Diagnostics / Config | robot | `/api/robot/*` → robot_controller |
 | 📷 Cameras | camera | `/api/camera/*` → camera_service |
 | 🥽 Teleop | teleop | `/api/teleop/*` → teleop |
+
+Status 页的“平台工具”可一键启动或重启 Camera、Coach、Controller；
+Depot 页的“ROS → LeRobot 批量转换”会在后台运行
+`coach/scripts/rosbag_to_lerobot.py --all`，并显示转换日志。
 
 顶部三灯状态栏(Camera / Teleop / Robot)每 2 秒轮询 `/api/services/status`。
 
