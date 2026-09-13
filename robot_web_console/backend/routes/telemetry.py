@@ -12,18 +12,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["telemetry"])
 
 
-def _controller_ws_url() -> str:
+def _controller_ws_url(profile: str = "core") -> str:
     api_url = get_settings().services["robot"].api_url
     parsed = urlparse(api_url)
     scheme = "wss" if parsed.scheme == "https" else "ws"
     path = parsed.path.rstrip("/") + "/ws/telemetry"
-    return urlunparse((scheme, parsed.netloc, path, "", "", ""))
+    return urlunparse((scheme, parsed.netloc, path, "", f"profile={profile}", ""))
 
 
 @router.websocket("/ws/telemetry")
 async def telemetry_relay(websocket: WebSocket):
     await websocket.accept()
-    upstream_url = _controller_ws_url()
+    upstream_url = _controller_ws_url("core")
     try:
         try:
             import websockets
