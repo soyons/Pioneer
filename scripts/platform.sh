@@ -62,6 +62,11 @@ stop_one() {
 }
 
 start_services() {
+    if [ -z "${NO_CAMERA:-}" ] && [ "${FORCE_CAMERA:-0}" != "1" ] \
+            && ! compgen -G "/dev/video*" >/dev/null; then
+        NO_CAMERA=1
+        info "未检测到 /dev/video*，自动跳过 camera_service（可用 FORCE_CAMERA=1 强制启动）"
+    fi
     # start_all owns camera + controller as one process group and already
     # performs ROS/message setup and camera checks.
     launch "backend" env \

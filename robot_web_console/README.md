@@ -32,6 +32,10 @@ cd /workspace
 ./scripts/platform.sh start
 ```
 
+没有相机时脚本会自动跳过 camera_service，仍启动 Coach、Controller 和 Web Console。
+也可以显式使用 `NO_CAMERA=1 ./scripts/platform.sh start`；插入相机后用
+`FORCE_CAMERA=1 ./scripts/platform.sh restart` 强制检查并启动相机。
+
 访问: http://localhost:3000。常用管理命令:
 
 ```bash
