@@ -2,10 +2,11 @@
 # 一键启动：camera_service（含相机检查） + robot_controller（含 web HTTP API）
 #
 # 用法（在容器内）：
-#   ./scripts/start_all.sh                 # 检查相机 -> 启动两个服务
+#   ./scripts/start_all.sh                 # 自动检测相机并启动可用服务
 #   SKIP_CAMERA_CHECK=1 ./scripts/start_all.sh   # 跳过相机检查
 #   NO_CAMERA=1 ./scripts/start_all.sh     # 只启动 robot_controller
 #   NO_CONTROLLER=1 ./scripts/start_all.sh # 只启动 camera_service
+#   FORCE_CAMERA=1 ./scripts/start_all.sh  # 即使没有 /dev/video* 也尝试启动相机
 #
 # 环境变量（透传给子服务）：
 #   CAMERA_CONFIG     camera_service 配置文件（默认 camera_service/config/default_config.yaml）
@@ -68,12 +69,24 @@ else
 fi
 
 # ---- 3. 相机检查 ----
+# 设备不存在时自动以无相机模式运行，保证 Jetson 初次部署或离线调试时
+# 仍可启动 controller 和 Web API。插入相机后可用 FORCE_CAMERA=1 强制检查。
+if [ -z "${NO_CAMERA:-}" ] && [ "${FORCE_CAMERA:-0}" != "1" ] \
+        && ! compgen -G "/dev/video*" >/dev/null; then
+    NO_CAMERA=1
+    warn "未检测到 /dev/video*，自动跳过 camera_service（可用 FORCE_CAMERA=1 强制启动）"
+fi
+
 if [ -z "${NO_CAMERA:-}" ] && [ -z "${SKIP_CAMERA_CHECK:-}" ]; then
     info "检查相机设备..."
     if ! PYTHONPATH="$ROOT_DIR/camera_service/src:${PYTHONPATH:-}" \
             python3 -m camera_service --mode check --config "$CAMERA_CONFIG"; then
-        err "相机检查未通过。修复后重试，或用 SKIP_CAMERA_CHECK=1 跳过。"
-        exit 1
+        if [ "${FORCE_CAMERA:-0}" = "1" ]; then
+            err "相机检查未通过。请检查设备、配置和权限。"
+            exit 1
+        fi
+        warn "相机检查未通过，自动切换无相机模式（需要相机时使用 FORCE_CAMERA=1 重试）"
+        NO_CAMERA=1
     fi
 fi
 

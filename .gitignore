@@ -23,6 +23,7 @@ piper_dataset/data/
 
 # 临时命令/调试输出
 tmp
+.runtime/
 
 # 本地凭据
 auth.json

@@ -28,6 +28,20 @@ piper/
 
 ## 快速开始
 
+### 一键启动平台
+
+在开发容器或 Jetson Nano 上，可用统一入口启动 Web Console、Coach、Controller 和相机服务：
+
+```bash
+./scripts/platform.sh start
+./scripts/platform.sh status
+./scripts/platform.sh stop
+```
+
+没有相机时会自动跳过 `camera_service`，其余服务仍会启动。插入相机后执行
+`FORCE_CAMERA=1 ./scripts/platform.sh restart` 即可启用相机；也可以使用
+`NO_CONSOLE=1`、`NO_COACH=1` 或 `NO_CONTROLLER=1` 关闭不需要的模块。
+
 **新的统一开发环境** 🎉
 
 ```bash
