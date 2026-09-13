@@ -53,7 +53,7 @@ cd /workspace
 旧的分步方式仍然可用:
 
 ```bash
-./scripts/start_all.sh
+./scripts/start_backend.sh
 
 cd robot_web_console
 PYTHONPATH=. python3 -m uvicorn backend.main:app --host 0.0.0.0 --port 3000
@@ -170,7 +170,7 @@ robot_web_console/
 
 Status 页的“平台工具”可一键启动或重启 Camera、Coach、Controller；
 Depot 页的“ROS → LeRobot 批量转换”会在后台运行
-`coach/scripts/rosbag_to_lerobot.py --all`，并显示转换日志。
+`coach/scripts/convert_rosbag_to_lerobot.py --all`，并显示转换日志。
 
 顶部三灯状态栏(Camera / Teleop / Robot)每 2 秒轮询 `/api/services/status`。
 

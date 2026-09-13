@@ -10,7 +10,7 @@ Piper 是一个完整的机器人遥操作系统，支持 VR 遥操作和未来�
 
 ```
 piper/
-├── teleop/              # 遥操作服务（原 vr_robot_bridge）
+├── coach/               # 遥操作与示教服务
 ├── robot_controller/    # 机器人控制层
 ├── camera_service/      # 相机服务（独立）
 ├── ros_interface/       # ROS2 消息定义
@@ -51,8 +51,8 @@ piper/
 # 2. 构建 ROS2 消息
 ./docker_dev.sh build-ros
 
-# 3. 运行 teleop（终端 1）
-./docker_dev.sh teleop
+# 3. 运行 coach（终端 1）
+./docker_dev.sh coach
 
 # 4. 运行 robot_controller（终端 2）
 ./docker_dev.sh controller
@@ -69,18 +69,18 @@ piper/
 
 ```bash
 # 1. 启动遥操作服务
-cd teleop
+cd coach
 ./scripts/docker_debug.sh start
 ./scripts/docker_debug.sh shell
-cd /workspace/teleop
-./scripts/docker_run_teleop.sh
+cd /workspace/coach
+./scripts/start.sh
 
 # 2. 启动机器人控制器
 cd robot_controller
 ./scripts/docker_debug.sh start
 ./scripts/docker_debug.sh shell
 cd /workspace/robot_controller
-./scripts/docker_run_controller.sh
+./scripts/start.sh
 
 # 3. Quest 上启动 VR Tracker 应用
 ```
@@ -97,7 +97,7 @@ cd /workspace/robot_controller
 
 **数据流**：
 ```
-Quest VR → teleop → mix_robot_cmd → robot_controller → 硬件
+Quest VR → coach → mix_robot_cmd → robot_controller → 硬件
                 ↑                                    ↓
                 └──────────── robot/state ───────────┘
 ```
@@ -107,7 +107,7 @@ Quest VR → teleop → mix_robot_cmd → robot_controller → 硬件
 - [DOCKER_DEV.md](./DOCKER_DEV.md) - **开发环境快速开始** ⭐
 - [CLAUDE.md](./CLAUDE.md) - 项目指南和架构说明
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - 系统架构详解
-- [teleop/README.md](./teleop/README.md) - 遥操作服务文档
+- [coach/README.md](./coach/README.md) - 遥操作与示教服务文档
 - [robot_controller/README.md](./robot_controller/README.md) - 控制器文档
 - [robot_controller/README_URDF_MOCK.md](./robot_controller/README_URDF_MOCK.md) - URDF 模拟后端
 

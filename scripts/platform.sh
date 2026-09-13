@@ -67,14 +67,14 @@ start_services() {
         NO_CAMERA=1
         info "未检测到 /dev/video*，自动跳过 camera_service（可用 FORCE_CAMERA=1 强制启动）"
     fi
-    # start_all owns camera + controller as one process group and already
+    # start_backend owns camera + controller as one process group and already
     # performs ROS/message setup and camera checks.
     launch "backend" env \
         SKIP_CAMERA_CHECK="${SKIP_CAMERA_CHECK:-}" \
         NO_CAMERA="${NO_CAMERA:-}" \
         NO_CONTROLLER="${NO_CONTROLLER:-}" \
         CONTROLLER_CONFIG="${CONTROLLER_CONFIG:-}" \
-        "$ROOT_DIR/scripts/start_all.sh"
+        "$ROOT_DIR/scripts/start_backend.sh"
 
     if [ -z "${NO_COACH:-}" ]; then
         launch "coach" env \

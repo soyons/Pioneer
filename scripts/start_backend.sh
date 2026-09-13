@@ -2,16 +2,16 @@
 # 一键启动：camera_service（含相机检查） + robot_controller（含 web HTTP API）
 #
 # 用法（在容器内）：
-#   ./scripts/start_all.sh                 # 自动检测相机并启动可用服务
-#   SKIP_CAMERA_CHECK=1 ./scripts/start_all.sh   # 跳过相机检查
-#   NO_CAMERA=1 ./scripts/start_all.sh     # 只启动 robot_controller
-#   NO_CONTROLLER=1 ./scripts/start_all.sh # 只启动 camera_service
-#   FORCE_CAMERA=1 ./scripts/start_all.sh  # 即使没有 /dev/video* 也尝试启动相机
+#   ./scripts/start_backend.sh                 # 自动检测相机并启动可用服务
+#   SKIP_CAMERA_CHECK=1 ./scripts/start_backend.sh   # 跳过相机检查
+#   NO_CAMERA=1 ./scripts/start_backend.sh     # 只启动 robot_controller
+#   NO_CONTROLLER=1 ./scripts/start_backend.sh # 只启动 camera_service
+#   FORCE_CAMERA=1 ./scripts/start_backend.sh  # 即使没有 /dev/video* 也尝试启动相机
 #
 # 环境变量（透传给子服务）：
 #   CAMERA_CONFIG     camera_service 配置文件（默认 camera_service/config/default_config.yaml）
 #   CONTROLLER_CONFIG robot_controller 配置文件（默认其内置 default_config.yaml）
-#   MODE / FPS / RAW / QUALITY   透传给 camera_service（见 docker_run_camera_service.sh）
+#   MODE / FPS / RAW / QUALITY   透传给 camera_service（见 camera_service/scripts/start.sh）
 #
 # Ctrl+C 一次性停止全部服务。日志写到各自项目的 logs/ 目录。
 
@@ -21,9 +21,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
-info() { echo -e "${GREEN}[start_all]${NC} $1"; }
-warn() { echo -e "${YELLOW}[start_all]${NC} $1"; }
-err()  { echo -e "${RED}[start_all]${NC} $1"; }
+info() { echo -e "${GREEN}[start_backend]${NC} $1"; }
+warn() { echo -e "${YELLOW}[start_backend]${NC} $1"; }
+err()  { echo -e "${RED}[start_backend]${NC} $1"; }
 
 CAMERA_CONFIG="${CAMERA_CONFIG:-$ROOT_DIR/camera_service/config/default_config.yaml}"
 
@@ -131,7 +131,7 @@ if [ -z "${NO_CAMERA:-}" ]; then
     CAM_LOG="$ROOT_DIR/camera_service/logs/camera_latest.log"
     info "启动 camera_service -> $CAM_LOG"
     CONFIG_FILE="$CAMERA_CONFIG" \
-        "$ROOT_DIR/camera_service/scripts/docker_run_camera_service.sh" \
+        "$ROOT_DIR/camera_service/scripts/start.sh" \
         > "$CAM_LOG" 2>&1 &
     PIDS+=($!); NAMES+=("camera_service")
     sleep 2

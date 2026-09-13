@@ -1,6 +1,6 @@
 #!/bin/bash
 # Piper 统一 Docker 开发环境管理脚本
-# 管理 teleop 和 robot_controller 的开发容器
+# 管理 coach 和 robot_controller 的开发容器
 
 set -e
 
@@ -286,8 +286,8 @@ case "$1" in
         info "Next steps:"
         info "  1. Enter shell:  ./docker_dev.sh shell"
         info "  2. Build ros_interface:  cd /workspace/ros_interface && bash build.sh"
-        info "  3. Run teleop:  cd /workspace/teleop && ./scripts/docker_run_teleop.sh"
-        info "  4. Run controller:  cd /workspace/robot_controller && ./scripts/docker_run_controller.sh"
+        info "  3. Run coach:  cd /workspace/coach && ./scripts/start.sh"
+        info "  4. Run controller:  cd /workspace/robot_controller && ./scripts/start.sh"
         ;;
 
     stop)
@@ -314,14 +314,14 @@ case "$1" in
         docker exec -it "$CONTAINER_NAME" bash
         ;;
 
-    teleop)
+    coach)
         if ! docker ps | grep -q "$CONTAINER_NAME"; then
             error "Container is not running. Start it first with: ./docker_dev.sh start"
             exit 1
         fi
 
-        info "Starting teleop..."
-        docker exec -it "$CONTAINER_NAME" bash -c "cd /workspace/teleop && ./scripts/docker_run_teleop.sh"
+        info "Starting coach..."
+        docker exec -it "$CONTAINER_NAME" bash -c "cd /workspace/coach && ./scripts/start.sh"
         ;;
 
     controller)
@@ -331,7 +331,7 @@ case "$1" in
         fi
 
         info "Starting robot_controller..."
-        docker exec -it "$CONTAINER_NAME" bash -c "cd /workspace/robot_controller && ./scripts/docker_run_controller.sh"
+        docker exec -it "$CONTAINER_NAME" bash -c "cd /workspace/robot_controller && ./scripts/start.sh"
         ;;
 
     logs)
@@ -341,10 +341,10 @@ case "$1" in
         fi
 
         case "$2" in
-            teleop)
-                info "Showing teleop logs..."
-                docker exec "$CONTAINER_NAME" tail -f /workspace/teleop/logs/teleop_latest.log 2>/dev/null || \
-                    warn "No teleop logs found"
+            coach)
+                info "Showing coach logs..."
+                docker exec "$CONTAINER_NAME" tail -f /workspace/coach/logs/coach_latest.log 2>/dev/null || \
+                    warn "No coach logs found"
                 ;;
             controller)
                 info "Showing controller logs..."
@@ -352,7 +352,7 @@ case "$1" in
                     warn "No controller logs found"
                 ;;
             *)
-                error "Usage: $0 logs {teleop|controller}"
+                error "Usage: $0 logs {coach|controller}"
                 exit 1
                 ;;
         esac
@@ -417,7 +417,7 @@ case "$1" in
 
     *)
         show_banner
-        echo "Usage: $0 {build|start|stop|restart|shell|teleop|controller|logs|status|test-x11|build-ros|clean}"
+        echo "Usage: $0 {build|start|stop|restart|shell|coach|controller|logs|status|test-x11|build-ros|clean}"
         echo ""
         echo "Commands:"
         echo "  build        - Build custom Docker image with pre-installed dependencies"
@@ -425,9 +425,9 @@ case "$1" in
         echo "  stop         - Stop and remove container"
         echo "  restart      - Restart container"
         echo "  shell        - Enter container shell"
-        echo "  teleop       - Run teleop service"
+        echo "  coach        - Run coach service"
         echo "  controller   - Run robot_controller service"
-        echo "  logs         - Show logs (teleop|controller)"
+        echo "  logs         - Show logs (coach|controller)"
         echo "  status       - Show container and ROS2 status"
         echo "  test-x11     - Test X11 connection with xeyes"
         echo "  build-ros    - Build ros_interface package"
@@ -438,16 +438,16 @@ case "$1" in
         echo "  2. ./docker_dev.sh start          # Start container (fast with custom image)"
         echo "  3. ./docker_dev.sh shell          # Enter shell"
         echo "  4. ./docker_dev.sh build-ros      # Build ROS2 messages"
-        echo "  5. ./docker_dev.sh teleop         # Run teleop"
+        echo "  5. ./docker_dev.sh coach          # Run coach"
         echo ""
         echo "Examples:"
         echo "  ./docker_dev.sh build              # Build image with dependencies"
         echo "  ./docker_dev.sh start              # Start container"
         echo "  ./docker_dev.sh shell              # Enter shell"
         echo "  ./docker_dev.sh build-ros          # Build ROS2 messages"
-        echo "  ./docker_dev.sh teleop             # Run teleop"
+        echo "  ./docker_dev.sh coach              # Run coach"
         echo "  ./docker_dev.sh controller         # Run controller"
-        echo "  ./docker_dev.sh logs teleop        # View teleop logs"
+        echo "  ./docker_dev.sh logs coach         # View coach logs"
         echo ""
         exit 1
         ;;

@@ -121,7 +121,7 @@ async def start_conversion(request: Request):
     if storage_id not in {"sqlite3", "mcap"}:
         raise HTTPException(status_code=400, detail="storage_id 只支持 sqlite3 或 mcap")
 
-    script = Path(__file__).resolve().parents[3] / "coach" / "scripts" / "rosbag_to_lerobot.py"
+    script = Path(__file__).resolve().parents[3] / "coach" / "scripts" / "convert_rosbag_to_lerobot.py"
     if not script.is_file():
         raise HTTPException(status_code=500, detail=f"转换脚本不存在: {script}")
 

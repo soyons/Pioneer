@@ -127,22 +127,22 @@ Quest发送的原始TCP数据（每帧一行JSON）：
 
 ```bash
 # 1. 启动Docker开发容器（自动检测Quest USB + adb端口转发）
-cd teleop
+cd coach
 ./scripts/docker_debug.sh start
 
 # 2. 进入容器
 ./scripts/docker_debug.sh shell
 
 # 3. 容器内运行teleop（首次自动编译ros_interface）
-cd /workspace/teleop
-./scripts/docker_run_teleop.sh
+cd /workspace/coach
+./scripts/start.sh
 
 # 4. 另一个终端启动 robot_controller
 cd robot_controller
 ./scripts/docker_debug.sh start
 ./scripts/docker_debug.sh shell
 cd /workspace/robot_controller
-./scripts/docker_run_controller.sh
+./scripts/start.sh
 
 # 5. Quest上启动VR Tracker应用
 
@@ -156,7 +156,7 @@ ros2 topic list | grep robot/camera
 
 ```bash
 # Mac上修改代码后，容器内Ctrl+C停止teleop，重新运行
-./scripts/docker_run_teleop.sh
+./scripts/start.sh
 
 # 修改了msg文件后，重新编译
 cd /workspace/ros_interface
@@ -210,7 +210,7 @@ piper/
 │   │   └── default_config.yaml
 │   ├── start_teleop.sh         # 后续由 web console 调用的正式启动入口
 │   ├── scripts/
-│   │   ├── docker_run_teleop.sh # 容器内本地调试入口
+│   │   ├── start.sh # 容器内本地调试入口
 │   │   └── docker_debug.sh      # Docker 本地调试容器脚本
 │   └── unit_test/
 │
@@ -237,7 +237,7 @@ piper/
 │   ├── config/
 │   │   └── backend_config.yaml
 │   ├── scripts/
-│   │   ├── docker_run_controller.sh
+│   │   ├── start.sh
 │   │   └── docker_debug.sh
 │   └── tests/
 │
@@ -315,7 +315,7 @@ rqt_plot /mix_robot_cmd/left_arm/position/x
 rqt_image_view
 
 # 查看日志
-tail -f teleop/logs/teleop_latest.log
+tail -f coach/logs/coach_latest.log
 tail -f robot_controller/logs/controller_latest.log
 
 # HTTP API

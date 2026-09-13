@@ -46,8 +46,8 @@ install_project() {
     fi
 }
 
-# 1. teleop
-install_project "teleop" "$SCRIPT_DIR/teleop"
+# 1. coach
+install_project "coach" "$SCRIPT_DIR/coach"
 
 # 2. robot_controller
 install_project "robot_controller" "$SCRIPT_DIR/robot_controller"
@@ -73,6 +73,6 @@ info "✅ All dependencies installed successfully!"
 info ""
 info "Next steps:"
 info "  1. Build ROS2 messages: cd ros_interface && bash build.sh"
-info "  2. Run teleop: cd teleop && ./scripts/docker_run_teleop.sh"
-info "  3. Run controller: cd robot_controller && ./scripts/docker_run_controller.sh"
+info "  2. Run coach: cd coach && ./scripts/start.sh"
+info "  3. Run controller: cd robot_controller && ./scripts/start.sh"
 echo ""
