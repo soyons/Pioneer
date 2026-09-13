@@ -14,9 +14,21 @@ class DiagnosticsPage {
         this.isLive = true;
         this.hoverTimeMs = null;
         this.renderRaf = null;
+        this.renderTimer = null;
+        this.renderRequested = false;
+        this.lastRenderAt = 0;
+        // Telemetry arrives at 10 Hz, but rebuilding hundreds of SVG/DOM nodes
+        // at that rate is expensive on Jetson Nano. Keep ingestion live and
+        // refresh the visual view at a bounded rate instead.
+        this.renderIntervalMs = 200;
         this.dragState = null;
         this.active = false;
         this.maxSamples = 1200;
+        this.samplesVersion = 0;
+        this.visibleSamplesCache = null;
+        this.visibleSamplesCacheKey = '';
+        this.dataChannels = new Set();
+        this.visibilityHandler = null;
         this.connectionState = 'disconnected';
         this.palette = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948'];
         this.darkPalette = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'];
@@ -85,6 +97,10 @@ class DiagnosticsPage {
         `;
 
         this.bindTelemetryControls();
+        this.visibilityHandler = () => {
+            if (!document.hidden && this.renderRequested) this.scheduleRender();
+        };
+        document.addEventListener('visibilitychange', this.visibilityHandler);
         this.connectTelemetry();
         await this.scanPorts();
     }
@@ -136,6 +152,8 @@ class DiagnosticsPage {
         }
         if (message.type === 'telemetry_history') {
             this.samples = this.dedupeSamples(message.samples || []).slice(-this.maxSamples);
+            this.samplesVersion += 1;
+            this.rebuildDataChannelCache();
             this.ensureViewport(true);
             this.scheduleRender();
             return;
@@ -145,6 +163,8 @@ class DiagnosticsPage {
             if (!previousLast || message.seq > previousLast.seq) this.samples.push(message);
             else this.samples = this.dedupeSamples([...this.samples, message]);
             if (this.samples.length > this.maxSamples) this.samples.splice(0, this.samples.length - this.maxSamples);
+            this.samplesVersion += 1;
+            this.markDataChannels(message);
             if (this.isLive) this.followLatest();
             this.scheduleRender();
         }
@@ -250,9 +270,23 @@ class DiagnosticsPage {
     }
 
     scheduleRender() {
-        if (!this.active || this.renderRaf) return;
+        if (!this.active) return;
+        this.renderRequested = true;
+        if (document.hidden || this.renderRaf || this.renderTimer) return;
+        const elapsed = performance.now() - this.lastRenderAt;
+        const delay = Math.max(0, this.renderIntervalMs - elapsed);
+        if (delay > 0) {
+            this.renderTimer = setTimeout(() => {
+                this.renderTimer = null;
+                this.scheduleRender();
+            }, delay);
+            return;
+        }
         this.renderRaf = requestAnimationFrame(() => {
             this.renderRaf = null;
+            if (!this.active || document.hidden) return;
+            this.renderRequested = false;
+            this.lastRenderAt = performance.now();
             this.drawTelemetry();
         });
     }
@@ -301,7 +335,11 @@ class DiagnosticsPage {
 
     visibleSamples() {
         if (this.viewStartMs == null || this.viewEndMs == null) return [];
-        return this.samples.filter(sample => sample.t_ms >= this.viewStartMs && sample.t_ms <= this.viewEndMs);
+        const key = `${this.samplesVersion}:${this.viewStartMs}:${this.viewEndMs}`;
+        if (this.visibleSamplesCacheKey === key && this.visibleSamplesCache) return this.visibleSamplesCache;
+        this.visibleSamplesCache = this.samples.filter(sample => sample.t_ms >= this.viewStartMs && sample.t_ms <= this.viewEndMs);
+        this.visibleSamplesCacheKey = key;
+        return this.visibleSamplesCache;
     }
 
     groupsForSection(sectionId) {
@@ -348,7 +386,10 @@ class DiagnosticsPage {
             summary.append(meta);
             const grid = document.createElement('div');
             grid.className = 'telemetry-plot-grid';
-            groups.forEach(group => grid.append(this.buildPlot(group)));
+            // Most sections start collapsed. Do not build hidden SVG paths until
+            // the operator opens that section.
+            if (details.open) groups.forEach(group => grid.append(this.buildPlot(group)));
+            else details.addEventListener('toggle', () => this.scheduleRender(), { once: true });
             details.append(summary, grid);
             host.append(details);
         });
@@ -381,7 +422,19 @@ class DiagnosticsPage {
     }
 
     channelHasData(channel) {
-        return this.samples.some(sample => Number.isFinite(sample.values?.[channel.index]));
+        return this.dataChannels.has(channel.index);
+    }
+
+    markDataChannels(sample) {
+        if (!sample?.values) return;
+        sample.values.forEach((value, index) => {
+            if (Number.isFinite(value)) this.dataChannels.add(index);
+        });
+    }
+
+    rebuildDataChannelCache() {
+        this.dataChannels.clear();
+        this.samples.forEach(sample => this.markDataChannels(sample));
     }
 
     buildPlotSvg(group, channels = group.channels) {
@@ -712,11 +765,20 @@ class DiagnosticsPage {
         this.active = false;
         api.closeWebSocket('telemetry');
         if (this.renderRaf) cancelAnimationFrame(this.renderRaf);
+        if (this.renderTimer) clearTimeout(this.renderTimer);
         this.renderRaf = null;
+        this.renderTimer = null;
+        this.renderRequested = false;
+        if (this.visibilityHandler) document.removeEventListener('visibilitychange', this.visibilityHandler);
+        this.visibilityHandler = null;
         this.dragState = null;
         this.hoverTimeMs = null;
         this.schema = null;
         this.samples = [];
+        this.samplesVersion = 0;
+        this.visibleSamplesCache = null;
+        this.visibleSamplesCacheKey = '';
+        this.dataChannels.clear();
         this.selectedSections.clear();
         this.viewStartMs = null;
         this.viewEndMs = null;

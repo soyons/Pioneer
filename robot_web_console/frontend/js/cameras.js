@@ -67,7 +67,9 @@ const CamerasPage = {
             btn?.classList.add('active');
             // 加 t 参数防止浏览器缓存,首次开启时才设
             if (!img.src || !img.src.includes('/stream')) {
-                img.src = `/api/camera/cameras/${encodeURIComponent(camName)}/stream?t=${Date.now()}`;
+                // The ROS camera publisher keeps the configured recording FPS.
+                // Console previews use a low rate to reduce browser/network CPU.
+                img.src = `/api/camera/cameras/${encodeURIComponent(camName)}/stream?fps=8&t=${Date.now()}`;
             }
         } else {
             preview.classList.remove('active');
